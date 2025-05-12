@@ -21,3 +21,16 @@ Disaster Relief Sensor Mapping - The system is designed to collect critical envi
 SAM-M8Q (GPS Board) Using UART
 AWR1843 mmWave Boost Radar Using SPI
 Thingy52: BME680, Temperature and Humidity sensor using I2C
+
+# Wireless Network Communications, Iot Protocols/Web Dashboards
+
+
+
+# DIKW Pyramid
+Data: Raw sensor readings 
+
+Information: Timestamped and geotagged data logs
+
+Knowledge: Heatmaps showing gas build-up or unstable areas
+
+Wisdom: Emergency teams prioritise zones based on trends (e.g., rising CO₂ + detected motion → possible collapse risk)
