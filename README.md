@@ -34,3 +34,8 @@ Information: Timestamped and geotagged data logs
 Knowledge: Heatmaps showing gas build-up or unstable areas
 
 Wisdom: Emergency teams prioritise zones based on trends (e.g., rising CO₂ + detected motion → possible collapse risk)
+
+# Project Software/Hardware management.
+
+# Equipment
+Thing52, M5 Core2, SAM-M8Q (GPS Board), WR1843 mmWave Boost Radar, nrf52840 DK, Speaker
