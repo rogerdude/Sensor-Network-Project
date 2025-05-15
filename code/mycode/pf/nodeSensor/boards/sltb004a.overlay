@@ -1,0 +1,50 @@
+/ {
+    ramdisk0 {
+        compatible = "zephyr,ram-disk";
+        disk-name = "RAM";
+        sector-size = <512>;
+        sector-count = <64>;
+        label = "ramdisk0";
+        status = "okay";
+    };
+};
+
+
+&pinctrl {
+        i2c_env_default: i2c_env_default {
+        group1 {
+            psels = <GECKO_PSEL(I2C_SDA, C, 4)>,
+                <GECKO_PSEL(I2C_SCL, C, 5)>,
+                <GECKO_LOC(I2C_SDA, 17)>,
+                <GECKO_LOC(I2C_SCL, 17)>;
+        };
+    };
+};
+
+&i2c1 {
+    pinctrl-0 = <&i2c_env_default>;
+    pinctrl-names = "default";
+    status = "okay";
+
+    bmp280: bmp280@77 {
+        status = "okay";
+        compatible = "bosch,bme280";
+        reg = <0x77>;
+        supply-gpios = <&gpiof 9 GPIO_ACTIVE_HIGH>;
+    };
+
+    si7021: si7021@40 {
+        compatible = "silabs,si7006";
+        reg = <0x40>;
+        status = "okay";
+        supply-gpios = <&gpiof 9 GPIO_ACTIVE_HIGH>;
+    };
+
+    si1133: si1133@55 {
+        compatible = "silabs,si1133";
+        reg = <0x55>;
+        status = "okay";
+        supply-gpios = <&gpiof 9 GPIO_ACTIVE_HIGH>;
+    };
+
+};
