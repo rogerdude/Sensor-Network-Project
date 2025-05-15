@@ -143,11 +143,11 @@ Temporary Items
 .apdisk
 
 # My addition
-.west
-bootloader
-build
-modules
-tools
-zephyr
+code/.west
+code/bootloader
+code/build
+code/modules
+code/tools
+code/zephyr
 !code/mycode/zephyr/
 .cache
