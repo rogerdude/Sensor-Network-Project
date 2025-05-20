@@ -4,11 +4,12 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/json/json.h>
+#include <zephyr/data/json.h>
 #include <string.h>
+#include <zephyr/devicetree.h>
 
-#define TEMP_HUMIDITY_NODE DT_ALIAS(st_hts221)
-static const struct device *temp_humidity_dev = DEVICE_DT_GET_ONE(TEMP_HUMIDITY_NODE);
+
+static const struct device *temp_humidity_dev = DEVICE_DT_GET(DT_NODELABEL(hts221));
 static struct sensor_value temp, hum;
 
 struct SensorJSON {
@@ -141,7 +142,7 @@ int main(void) {
         if (err) {
             printk("adv_update failed: %d\n", err);
         } else {
-            printk("ADV -> %s\n", json);
+            printk("ADV -> %s\n", jsonBuf);
         }
 
         // wait 0.1 second 
