@@ -5,11 +5,17 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/hci.h>  
 
-char* sensornode1 = "";
-char* sensornode2 = "";
+struct SensorJSON {
+    int t;
+    int h;
+    int g;
+};
 
-
-
+static const struct json_obj_descr sensor_descr[] = {
+    JSON_OBJ_DESCR_PRIM(struct SensorJSON, t, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_PRIM(struct SensorJSON, h, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_PRIM(struct SensorJSON, g, JSON_TOK_NUMBER),
+};
 
 static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -31,7 +37,6 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 
 	 
 }
-
 
 int main(void) {
 	int err;
@@ -58,30 +63,28 @@ int main(void) {
 		return 0;
 	}
 	printk("Started scanning...\n");
-    
-	/* Start advertising */
-	err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad),
-		NULL, 0);
 
-	if (err) {
-		printk("Advertising failed to start (err %d)\n", err);
-		return 0;
-	}
-    
 	while (1) {
-		// struct bt_data ad1[] = {
-		// 	BT_DATA_BYTES(BT_DATA_FLAGS,BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR),
-		// 	BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA,
-		// 			  //add data here)
-		// 	)
-		// };
 
-		// int data = bt_le_adv_update_data(ad1, ARRAY_SIZE(ad1), NULL, 0);
-		// if (data) {
-		// 	printk("(err %d)\n", data);
-		// }
+		struct SensorJSON data = {
+            .t = temp.val1,
+            .h = hum.val1,
+            .g = tvoc
+        };
 
-		// k_msleep(50);
+		char jsonBuf[128];
+        int ret = json_obj_encode_buf(sensor_descr,
+                                          ARRAY_SIZE(sensor_descr),
+                                          &data,
+                                          jsonBuf,
+                                          sizeof(jsonBuf));
+        if (ret != 0) {
+			printk("JSON error\n");
+		} else {
+			printk("%s\n", jsonBuf);
+		}
+		
+		k_msleep(500);
 	}
 
  
