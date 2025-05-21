@@ -15,6 +15,10 @@ static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, 0x0f, 0x18)  
 };
 
+static const struct bt_data sd[] = {
+	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME)),
+};
+
 int main(void) {
 
     if (thingy52_rgb_init() != 0) {
@@ -42,7 +46,7 @@ int main(void) {
 
 	/* Start advertising */
 	err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad),
-		NULL, 0);
+		sd, ARRAY_SIZE(sd));
 
 	if (err) {
 		printk("Advertising failed to start (err %d)\n", err);
@@ -79,7 +83,7 @@ int main(void) {
                     IBEACON_RSSI),
         };
 
-        err = bt_le_adv_update_data(adv, ARRAY_SIZE(adv), NULL, 0);
+        err = bt_le_adv_update_data(adv, ARRAY_SIZE(adv), sd, ARRAY_SIZE(sd));
 
         if (err) {
             printk("adv_update failed: %d\n", err);
