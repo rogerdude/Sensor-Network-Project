@@ -5,7 +5,6 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/hci.h>
 #include <string.h>
-#include <thingy52_sensors.h>
 
 #define NUM_OF_SENSORS 2
 
@@ -103,6 +102,5 @@ int main(void) {
         k_msleep(1000);
 	}
 
- 
 }
  
