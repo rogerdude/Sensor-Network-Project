@@ -42,8 +42,8 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 
 	for (int i = 0; i < NUM_OF_SENSORS; i++) {
 		if (strcmp(mac_addr, sensor_mac[i]) == 0) {
-			for (int j = 9; j < (9 + 12); j++) {
-				recv[(i * 12) + j - 9] = ad->data[j];
+			for (int j = 5; j < (5 + 12); j++) {
+				recv[(i * 12) + j - 5] = ad->data[j];
 			}
 			break;
 		}

@@ -11,7 +11,7 @@
 #define NUM_OF_SENSORS 2
 
 struct SensorJSON {
-    char temp[10], hum[10], gas[10], accel[10][3];
+    char temp[10], hum[10], gas[10], acc_x[10], acc_y[10], acc_z[10];
 };
 
 static const struct bt_data ad[] = {
@@ -20,19 +20,16 @@ static const struct bt_data ad[] = {
         0x0f, 0x18)  
 };
 
-static const char* sensor_mac[NUM_OF_SENSORS] = {
-	"C9:2B:FC:6A:D3:C0",
-	"D1:31:A2:EB:63:2A"
-};
+static const char* mobile_mac =	"D8:7F:34:A5:D7:B4";
 
-uint8_t recv[NUM_OF_SENSORS][12];
+struct SensorValues values[NUM_OF_SENSORS];
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	struct net_buf_simple *ad) {
 	char addr_str[BT_ADDR_LE_STR_LEN];
 	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
 
-	if (ad->len != 30) {
+	if (ad->len < 28) {
 		return;
 	}
 
@@ -42,18 +39,14 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	}
 	mac_addr[17] = '\0';
 
-	for (int i = 0; i < NUM_OF_SENSORS; i++) {
-		if (strcmp(mac_addr, sensor_mac[i]) == 0) {
-			for (int j = 9; j < (9 + 12); j++) {
-				recv[i][j - 9] = ad->data[j];
-			}
-			// values[i].temp = (double) ad->data[9] + (double) ad->data[10] / 10;
-			// values[i].hum = (double) ad->data[11] + (double) ad->data[12] / 10;
-			// values[i].gas = (double) ((ad->data[13] << 8) | ad->data[14]);
-			// values[i].accel[0] = (double) ad->data[15] + (double) ad->data[16] / 10;
-			// values[i].accel[1] = (double) ad->data[17] + (double) ad->data[18] / 10;
-			// values[i].accel[2] = (double) ad->data[19] + (double) ad->data[20] / 10;
-			break;
+	if (strcmp(mac_addr, mobile_mac) == 0) {
+		for (int i = 0; i < NUM_OF_SENSORS; i++) {
+			values[i].temp = (double) ad->data[5 + (12 * i)] + (double) ad->data[6 + (12 * i)] / 10;
+			values[i].hum = (double) ad->data[7 + (12 * i)] + (double) ad->data[8 + (12 * i)] / 10;
+			values[i].gas = (double) ((ad->data[9 + (12 * i)] << 8) | ad->data[10 + (12 * i)]);
+			values[i].accel[0] = (double) ad->data[11 + (12 * i)] + (double) ad->data[12 + (12 * i)] / 10;
+			values[i].accel[1] = (double) ad->data[13 + (12 * i)] + (double) ad->data[14 + (12 * i)] / 10;
+			values[i].accel[2] = (double) ad->data[15 + (12 * i)] + (double) ad->data[16 + (12 * i)] / 10;
 		}
 	}
 }
@@ -83,18 +76,19 @@ int main(void) {
 	printk("Started scanning...\n");
 
 	static const struct json_obj_descr sensor_descr[] = {
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_NUMBER),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_NUMBER),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_STRING),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_STRING),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_STRING),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc_x, JSON_TOK_STRING),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc_y, JSON_TOK_STRING),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc_z, JSON_TOK_STRING),
 	};
 
 	while (1) {
 
-		struct SensorJSON data = {
-            .t = temp.val1,
-            .h = hum.val1,
-            .g = tvoc
-        };
+		struct SensorJSON jsonData;
+
+		sprintf(jsonData.temp, "%.1f", values[])
 
 		char jsonBuf[128];
         int ret = json_obj_encode_buf(sensor_descr,
