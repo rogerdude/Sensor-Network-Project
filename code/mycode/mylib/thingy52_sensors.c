@@ -49,7 +49,7 @@ void thingy52_process_sample(struct SensorData* data) {
     int rc = sensor_sample_fetch(gas);
 
     if (rc == 0) {
-        if (sensor_channel_get(gas, SENSOR_CHAN_VOC, &(data->tvoc)) < 0) {
+        if (sensor_channel_get(gas, SENSOR_CHAN_VOC, &(data->gas)) < 0) {
             printk("Cannot read CCS811 gas channel\n");
             return;
         }
@@ -68,7 +68,7 @@ void thingy52_process_sample(struct SensorData* data) {
 void thingy52_convert_data(struct SensorData* data, struct SensorValues* values) {
     values->temp = sensor_value_to_double(&(data->temp));
     values->hum = sensor_value_to_double(&(data->hum));
-    values->tvoc = sensor_value_to_double(&(data->tvoc));
+    values->gas = sensor_value_to_double(&(data->gas));
     values->accel[0] = sensor_value_to_double(&(data->accel[0]));
     values->accel[1] = sensor_value_to_double(&(data->accel[1]));
     values->accel[2] = sensor_value_to_double(&(data->accel[2]));

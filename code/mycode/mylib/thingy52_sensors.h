@@ -5,11 +5,11 @@
 #include <zephyr/drivers/sensor.h>
 
 struct SensorData {
-    struct sensor_value temp, hum, tvoc, accel[3];
+    struct sensor_value temp, hum, gas, accel[3];
 };
 
 struct SensorValues {
-    double temp, hum, tvoc, accel[3];
+    double temp, hum, gas, accel[3];
 };
 
 int init_thingy52_sensors(void);

@@ -1,432 +1,116 @@
-// #include <zephyr/kernel.h>
-// #include <zephyr/net/net_if.h>
-// #include <zephyr/net/net_event.h>
-// #include <zephyr/net/wifi_mgmt.h>
-// #include <zephyr/net/socket.h>
-// #include <zephyr/net/net_ip.h>
-// #include <zephyr/net/mqtt.h>
-// #include <zephyr/logging/log.h>
-// #include <zephyr/sys/printk.h>
-//  #include <zephyr/net/mqtt.h>
-// #include <zephyr/random/random.h>
-// #include <string.h>
-// #include <stdio.h>
-
-// LOG_MODULE_REGISTER(influx_example, LOG_LEVEL_INF);
-
-// #define SSID "Telstra1B216F"
-// #define PSK "cs62spe9xx"
-
-// #define INFLUXDB_HOST "192.168.0.30"
-// #define INFLUXDB_PORT 8086
-// #define INFLUXDB_PATH "/api/v2/write?org=uq&bucket=seminar&precision=s"
-// #define INFLUXDB_TOKEN "7onhN-UGxoD6qHWxs9XXXGoScZ7vCtSs7nlIv5Btg-KhEUnf_gdIZDYGiO-J1MG00s6LEjLssYGOuIDWIjYiCQ=="
-
-// #define MQTT_BROKER_ADDR "192.168.0.30"
-// #define MQTT_BROKER_PORT 1883
-
-// K_THREAD_STACK_DEFINE(mqtt_stack_area, 2048);
-// static struct k_thread mqtt_thread_data;
-// static K_SEM_DEFINE(wifi_connected, 0, 1);
-
-// static struct net_mgmt_event_callback wifi_cb;
-
-// static struct mqtt_client client;
-// static struct sockaddr_storage broker;
-// static uint8_t rx_buffer[256];
-// static uint8_t tx_buffer[256];
-// static uint8_t payload_buf[256];
- 
-// void mqtt_loop(void);
- 
-// static bool is_network_up(void)
-// {
-//     struct net_if *iface = net_if_get_default();
-//     return net_if_is_up(iface) && net_if_ipv4_addr_lookup(NULL, &iface);
-// }
-
-
-// static void handle_wifi_connect_result(struct net_mgmt_event_callback *cb)
-// {
-//     const struct wifi_status *status = cb->info;
-//     if (status->status == 0) {
-//         printk("Wi-Fi connected.\n");
-//         k_sem_give(&wifi_connected);
-//     } else {
-//         printk("Wi-Fi connection failed: %d\n", status->status);
-//     }
-// }
-
-// static void wifi_event_handler(struct net_mgmt_event_callback *cb,
-//                                uint32_t mgmt_event, struct net_if *iface)
-// {
-//     if (mgmt_event == NET_EVENT_WIFI_CONNECT_RESULT) {
-//         handle_wifi_connect_result(cb);
-//     }
-// }
-
-// void wifi_connect(void)
-// {
-//     struct net_if *iface = net_if_get_default();
-
-//     struct wifi_connect_req_params wifi_params = {
-//         .ssid = SSID,
-//         .ssid_length = strlen(SSID),
-//         .psk = PSK,
-//         .psk_length = strlen(PSK),
-//         .channel = WIFI_CHANNEL_ANY,
-//         .security = WIFI_SECURITY_TYPE_PSK,
-//         .band = WIFI_FREQ_BAND_2_4_GHZ,
-//         .mfp = WIFI_MFP_OPTIONAL
-//     };
-
-//     printk("Connecting to WiFi: %s\n", SSID);
-//     int ret = net_mgmt(NET_REQUEST_WIFI_CONNECT, iface,
-//                        &wifi_params, sizeof(wifi_params));
-
-//     if (ret) {
-//         printk("WiFi connect failed: %d\n", ret);
-//     }
-// }
- 
-// void mqtt_evt_handler(struct mqtt_client *const c, const struct mqtt_evt *evt)
-// {
-//     switch (evt->type) {
-//     case MQTT_EVT_CONNACK:
-//         if (evt->result == 0) {
-//             printk("MQTT client connected!\n");
-//         } else {
-//             printk("MQTT connect failed (%d)\n", evt->result);
-//         }
-//         break;
-//     case MQTT_EVT_DISCONNECT:
-//         printk("MQTT client disconnected (%d)\n", evt->result);
-//         break;
-//     case MQTT_EVT_PUBACK:
-//         printk("Message published successfully (ID: %u)\n", evt->param.puback.message_id);
-//         break;
-//     default:
-//         break;
-//     }
-// } 
- 
-// void mqtt_connect_and_publish(void)
-// {
-// //  
-
- 
- 
-//     memset(&broker, 0, sizeof(broker)); // Ensure broker is zeroed
-//     struct sockaddr_in *broker4 = (struct sockaddr_in *)&broker;
-//     broker4->sin_family = AF_INET;
-//     broker4->sin_port = htons(MQTT_BROKER_PORT);
-//     net_addr_pton(AF_INET, "192.168.0.30", &broker4->sin_addr);
-
-//     mqtt_client_init(&client);
-//     client.broker = &broker;
-//     client.evt_cb = mqtt_evt_handler;
-//     static uint8_t client_id_buf[32];  
-
-//     snprintf(client_id_buf, sizeof(client_id_buf), "basenode-%08x", sys_rand32_get());
-//     client.client_id.utf8 = client_id_buf;
-//     client.client_id.size = strlen(client_id_buf); 
-//     client.protocol_version = MQTT_VERSION_3_1_1;
-
-//     client.rx_buf = rx_buffer;
-//     client.rx_buf_size = sizeof(rx_buffer);
-//     client.tx_buf = tx_buffer;
-//     client.tx_buf_size = sizeof(tx_buffer);
-  
-    
-
-//     int rc = mqtt_connect(&client);
-//     if (rc != 0) {
-//         printk("mqtt_connect failed: %d\n", rc);
-//         return;
-//     }
-
-//     // Prepare JSON payload
-//     snprintf(payload_buf, sizeof(payload_buf),
-//              "{\"temperature\":%.2f,\"humidity\":%.2f}", 23.1, 45.6);
-
-//     struct mqtt_publish_param param = {
-//         .message.topic.topic.utf8 = "sensors/env1",
-//         .message.topic.topic.size = strlen("sensors/env1"),
-//         .message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-//         .message.payload.data = payload_buf,
-//         .message.payload.len = strlen(payload_buf),
-//         .message_id = sys_rand32_get(),
-//         .dup_flag = 0,
-//         .retain_flag = 0,
-//     };
-
-//     mqtt_publish(&client, &param);
-
-//     // Start MQTT loop thread
-//     k_thread_create(&mqtt_thread_data, mqtt_stack_area, K_THREAD_STACK_SIZEOF(mqtt_stack_area),
-//                     (k_thread_entry_t)mqtt_loop, NULL, NULL, NULL,
-//                     7, 0, K_NO_WAIT);
-// }
- 
-
-// void mqtt_loop(void)
-// {
-//     while (1) {
-//         mqtt_input(&client);
-//         mqtt_live(&client);
-//         k_sleep(K_MSEC(100));
-//     }
-// }
-
-// int main(void)
-// {
-//     // while (1) {
-//     //     {
-//     // printk("Hello from M5Stack Core2!\n");
-//     // k_sleep(K_SECONDS(1));
-//     //     }
-//     // }
-//     printk("Starting basenode\n");
-
-//     net_mgmt_init_event_callback(&wifi_cb, wifi_event_handler,
-//                                  NET_EVENT_WIFI_CONNECT_RESULT);
-//     net_mgmt_add_event_callback(&wifi_cb);
-
-//     wifi_connect();
-   
-//     if (k_sem_take(&wifi_connected, K_SECONDS(10)) == 0) {
-//         printk("Wi-Fi ready.\n");
-     
-
-//         mqtt_connect_and_publish(); 
-//     } else {
-//         printk("Wi-Fi connection timed out.\n");
-    
-// }
-//     return 0;
-// }
 
 #include <zephyr/kernel.h>
-#include <zephyr/net/net_if.h>
-#include <zephyr/net/net_event.h>
-#include <zephyr/net/wifi_mgmt.h>
-#include <zephyr/net/socket.h>
-#include <zephyr/net/net_ip.h>
-#include <zephyr/net/mqtt.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/sys/printk.h>
-#include <zephyr/random/random.h>
+#include <zephyr/settings/settings.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/hci.h>  
+#include <zephyr/data/json.h>
 #include <string.h>
-#include <stdio.h>
+#include <thingy52_sensors.h>
 
-LOG_MODULE_REGISTER(influx_example, LOG_LEVEL_INF);
+#define NUM_OF_SENSORS 2
 
-// Wi-Fi credentials
-#define SSID "jeremy phone"
-#define PSK "Habib1234"
+struct SensorJSON {
+    char temp[10], hum[10], gas[10], accel[10][3];
+};
 
-// MQTT broker config
-#define MQTT_BROKER_ADDR "172.20.10.4"
-#define MQTT_BROKER_PORT 1883
+static const struct bt_data ad[] = {
+    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+    BT_DATA_BYTES(BT_DATA_UUID16_ALL,
+        0x0f, 0x18)  
+};
 
-// Thread and buffers
-K_THREAD_STACK_DEFINE(mqtt_stack_area, 2048);
-static struct k_thread mqtt_thread_data;
-static K_SEM_DEFINE(wifi_connected, 0, 1);
+static const char* sensor_mac[NUM_OF_SENSORS] = {
+	"C9:2B:FC:6A:D3:C0",
+	"D1:31:A2:EB:63:2A"
+};
 
-static struct net_mgmt_event_callback wifi_cb;
-static struct mqtt_client client;
-static struct sockaddr_storage broker;
+uint8_t recv[NUM_OF_SENSORS][12];
 
-static uint8_t rx_buffer[256];
-static uint8_t tx_buffer[256];
-static uint8_t payload_buf[256];
-static bool mqtt_ready = false;
+static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
+	struct net_buf_simple *ad) {
+	char addr_str[BT_ADDR_LE_STR_LEN];
+	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
 
-void mqtt_loop(void);
+	if (ad->len != 30) {
+		return;
+	}
 
-static void handle_wifi_connect_result(struct net_mgmt_event_callback *cb)
-{
-    const struct wifi_status *status = cb->info;
-    if (status->status == 0) {
-        printk("Wi-Fi connected.\n");
-        k_sem_give(&wifi_connected);
-    } else {
-        printk("Wi-Fi connection failed: %d\n", status->status);
-    }
+	char mac_addr[18];
+	for (int i = 0; i < 17; i++) {
+		mac_addr[i] = addr_str[i];
+	}
+	mac_addr[17] = '\0';
+
+	for (int i = 0; i < NUM_OF_SENSORS; i++) {
+		if (strcmp(mac_addr, sensor_mac[i]) == 0) {
+			for (int j = 9; j < (9 + 12); j++) {
+				recv[i][j - 9] = ad->data[j];
+			}
+			// values[i].temp = (double) ad->data[9] + (double) ad->data[10] / 10;
+			// values[i].hum = (double) ad->data[11] + (double) ad->data[12] / 10;
+			// values[i].gas = (double) ((ad->data[13] << 8) | ad->data[14]);
+			// values[i].accel[0] = (double) ad->data[15] + (double) ad->data[16] / 10;
+			// values[i].accel[1] = (double) ad->data[17] + (double) ad->data[18] / 10;
+			// values[i].accel[2] = (double) ad->data[19] + (double) ad->data[20] / 10;
+			break;
+		}
+	}
 }
 
-static void wifi_event_handler(struct net_mgmt_event_callback *cb,
-                               uint32_t mgmt_event, struct net_if *iface)
-{
-    if (mgmt_event == NET_EVENT_WIFI_CONNECT_RESULT) {
-        handle_wifi_connect_result(cb);
-    }
-}
+int main(void) {
+	/* Initialize the Bluetooth Subsystem */
+	int err = bt_enable(NULL);
+	if (err) {
+		printk("Bluetooth init failed (err %d)\n", err);
+		return 0;
+	}
 
-void wifi_connect(void)
-{
-    struct net_if *iface = net_if_get_default();
+	printk("Bluetooth initialized\n");
 
-    struct wifi_connect_req_params wifi_params = {
-        .ssid = SSID,
-        .ssid_length = strlen(SSID),
-        .psk = PSK,
-        .psk_length = strlen(PSK),
-        .channel = WIFI_CHANNEL_ANY,
-        .security = WIFI_SECURITY_TYPE_PSK,
-        .band = WIFI_FREQ_BAND_2_4_GHZ,
-        .mfp = WIFI_MFP_OPTIONAL
-    };
+	struct bt_le_scan_param scan_param = {
+		.type       = BT_LE_SCAN_TYPE_PASSIVE,
+		.options    = BT_LE_SCAN_OPT_NONE,
+		.interval   = BT_GAP_SCAN_FAST_INTERVAL,
+		.window     = BT_GAP_SCAN_FAST_WINDOW,
+	};
 
-    printk("Connecting to WiFi: %s\n", SSID);
-    int ret = net_mgmt(NET_REQUEST_WIFI_CONNECT, iface,
-                       &wifi_params, sizeof(wifi_params));
+	err = bt_le_scan_start(&scan_param, device_found);
+	if (err) {
+		printk("Start scanning failed (err %d)\n", err);
+		return 0;
+	}
+	printk("Started scanning...\n");
 
-    if (ret) {
-        printk("WiFi connect failed: %d\n", ret);
-    }
-}
+	static const struct json_obj_descr sensor_descr[] = {
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_NUMBER),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_NUMBER),
+	};
 
-void mqtt_evt_handler(struct mqtt_client *const c, const struct mqtt_evt *evt)
-{
-    switch (evt->type) {
-    case MQTT_EVT_CONNACK:
-        if (evt->result == 0) {
-            printk("MQTT client connected!\n");
-            mqtt_ready = true;
-        } else {
-            printk("MQTT connect failed (%d)\n", evt->result);
-        }
-        break;
-    case MQTT_EVT_DISCONNECT:
-        printk("MQTT client disconnected (%d)\n", evt->result);
-        mqtt_ready = false;
-        break;
-    case MQTT_EVT_PUBACK:
-        printk("Message published (ID: %u)\n", evt->param.puback.message_id);
-        break;
-    default:
-        break;
-    }
-}
+	while (1) {
 
-void mqtt_loop(void)
-{
-    while (1) {
-        int rc = mqtt_input(&client);
-        if (rc != 0) {
-            printk("mqtt_input error: %d\n", rc);
-        }
+		struct SensorJSON data = {
+            .t = temp.val1,
+            .h = hum.val1,
+            .g = tvoc
+        };
 
-        rc = mqtt_live(&client);
-        if (rc != 0) {
-            printk("mqtt_live error: %d\n", rc);
-        }
+		char jsonBuf[128];
+        int ret = json_obj_encode_buf(sensor_descr,
+                                          ARRAY_SIZE(sensor_descr),
+                                          &data,
+                                          jsonBuf,
+                                          sizeof(jsonBuf));
+        if (ret != 0) {
+			printk("JSON error\n");
+		} else {
+			printk("%s\n", jsonBuf);
+		}
+		
+		k_msleep(500);
+	}
 
-        k_sleep(K_MSEC(100));
-    }
-}
-
-void mqtt_connect_and_publish(void)
-{
-    struct sockaddr_in *broker4 = (struct sockaddr_in *)&broker;
-    memset(broker4, 0, sizeof(struct sockaddr_in));
-
-    broker4->sin_family = AF_INET;
-    broker4->sin_port = htons(MQTT_BROKER_PORT);
-    int ret = net_addr_pton(AF_INET, MQTT_BROKER_ADDR, &broker4->sin_addr);
-    if (ret < 0) {
-        printk("Failed to parse broker IP address\n");
-        return;
-    }
-
-    mqtt_client_init(&client);
-    client.broker = &broker;
-    client.evt_cb = mqtt_evt_handler;
-    client.client_id.utf8 = "basenode";
-    client.client_id.size = strlen(client.client_id.utf8);
-    client.protocol_version = MQTT_VERSION_3_1_1;
-
-    client.rx_buf = rx_buffer;
-    client.rx_buf_size = sizeof(rx_buffer);
-    client.tx_buf = tx_buffer;
-    client.tx_buf_size = sizeof(tx_buffer);
-
-    client.transport.type = MQTT_TRANSPORT_NON_SECURE;
-
-    struct mqtt_sec_config *tls = &client.transport.tls.config;
-    memset(tls, 0, sizeof(*tls));  
  
-
-    int sock = zsock_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-if (sock < 0) {
-    printk("Socket creation failed: %d\n", errno);
-} else {
-    ret = zsock_connect(sock, (struct sockaddr *)broker4, sizeof(struct sockaddr_in));
-    if (ret < 0) {
-        printk("TCP connect test failed: %d (errno: %d)\n", ret, errno);
-    } else {
-       
-        printk("TCP connect test succeeded!\n");
-       
-
-int fd = client.transport.tcp.sock;
-zsock_close(fd);  
-    }
 }
-
-
-    ret = mqtt_connect(&client);
-    if (ret != 0) {
-        printk("mqtt_connect failed: %d\n", ret);
-        return;
-    }
-
-    printk("Connected to MQTT broker, publishing message...\n");
-
-    snprintf(payload_buf, sizeof(payload_buf),
-             "{\"temperature\":%.2f,\"humidity\":%.2f}", 23.1, 45.6);
-
-    struct mqtt_publish_param param = {
-        .message.topic.topic.utf8 = "sensors/env1",
-        .message.topic.topic.size = strlen("sensors/env1"),
-        .message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-        .message.payload.data = payload_buf,
-        .message.payload.len = strlen(payload_buf),
-        .message_id = sys_rand32_get(),
-        .dup_flag = 0,
-        .retain_flag = 0,
-    };
-
-    ret = mqtt_publish(&client, &param);
-    if (ret) {
-        printk("Failed to publish message: %d\n", ret);
-    }
-
-    // Start MQTT thread to keep connection alive
-    k_thread_create(&mqtt_thread_data, mqtt_stack_area, K_THREAD_STACK_SIZEOF(mqtt_stack_area),
-                    (k_thread_entry_t)mqtt_loop, NULL, NULL, NULL,
-                    7, 0, K_NO_WAIT);
-}
-
-
-int main(void)
-{
-    printk("Starting BaseNode MQTT example\n");
-
-    net_mgmt_init_event_callback(&wifi_cb, wifi_event_handler,
-                                 NET_EVENT_WIFI_CONNECT_RESULT);
-    net_mgmt_add_event_callback(&wifi_cb);
-
-    wifi_connect();
-
-    if (k_sem_take(&wifi_connected, K_SECONDS(10)) == 0) {
-        printk("Wi-Fi ready.\n");
-        mqtt_connect_and_publish();
-    } else {
-        printk("Wi-Fi connection timed out.\n");
-    }
-
-    return 0;
-}
+ 

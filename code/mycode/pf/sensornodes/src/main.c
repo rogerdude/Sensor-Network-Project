@@ -64,24 +64,24 @@ int main(void) {
         thingy52_convert_data(&data, &values);
 
         printk("temp: %.1f C, hum: %.1f %%, gas: %.1f eTVOC, accel x: %.1f, y: %.1f, z: %.1f\n",
-            values.temp, values.hum, values.tvoc,
+            values.temp, values.hum, values.gas,
             values.accel[0], values.accel[1], values.accel[2]);
 
         struct bt_data adv[] = {
             BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
             BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA,
                     data.temp.val1,
-                    data.temp.val2,
+                    data.temp.val2 / 10000,
                     data.hum.val1,
-                    data.hum.val2,
-                    data.tvoc.val1,
-                    data.tvoc.val2,
+                    data.hum.val2 / 10000,
+                    data.gas.val1 >> 8,
+                    data.gas.val1 && 0xFF,
                     data.accel[0].val1,
-                    data.accel[0].val2,
+                    data.accel[0].val2 / 10000,
                     data.accel[1].val1,
-                    data.accel[1].val2,
+                    data.accel[1].val2 / 10000,
                     data.accel[2].val1,
-                    data.accel[2].val2,
+                    data.accel[2].val2 / 10000,
                     0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00,
