@@ -7,6 +7,7 @@
 #include <string.h>
 
 #define NUM_OF_SENSORS 2
+#define NUM_OF_BYTES 14
 
 #ifndef IBEACON_RSSI
 #define IBEACON_RSSI 0xc8
@@ -23,7 +24,7 @@ static const char* sensor_mac[NUM_OF_SENSORS] = {
 	"D1:31:A2:EB:63:2A"
 };
 
-uint8_t recv[NUM_OF_SENSORS * 12] = {0};
+uint8_t recv[NUM_OF_SENSORS * NUM_OF_BYTES] = {0};
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	struct net_buf_simple *ad) {
@@ -42,8 +43,8 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 
 	for (int i = 0; i < NUM_OF_SENSORS; i++) {
 		if (strcmp(mac_addr, sensor_mac[i]) == 0) {
-			for (int j = 5; j < (5 + 12); j++) {
-				recv[(i * 12) + j - 5] = ad->data[j];
+			for (int j = 5; j < (5 + 6); j++) {
+				recv[(i * 6) + j - 5] = ad->data[j];
 			}
 			break;
 		}
@@ -84,12 +85,19 @@ int main(void) {
 		printk("Advertising failed to start (err %d)\n", err);
 		return 0;
 	}
+	printk("Started advertising\n");
 
 	while (1) {
+		// Get location
+		recv[12] = 0xAB;
+		recv[13] = 0xBC;
+		recv[14] = 0xCD;
+		recv[15] = 0xDE;
+		recv[16] = 0xEF;
+		recv[17] = 0xFA;
+
 		struct bt_data adv[] = {
-            BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
-            BT_DATA(BT_DATA_MANUFACTURER_DATA,
-                    recv, NUM_OF_SENSORS * 12),
+            BT_DATA(BT_DATA_MANUFACTURER_DATA, recv, NUM_OF_SENSORS * NUM_OF_BYTES),
         };
 
         err = bt_le_adv_update_data(adv, ARRAY_SIZE(adv), NULL, 0);
