@@ -5,6 +5,7 @@ from scipy.ndimage import gaussian_filter
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+import PIL.Image
 
 # === Settings ===
 scale = 0.333               # Metres per pixel
@@ -107,5 +108,13 @@ add_btn.grid(row=1, column=2, rowspan=3, padx=10)
 plt.ion()  # Interactive mode
 fig, ax = plt.subplots(figsize=(8, 6))
 
-# === Start GUI ===
+def save_png_for_core2():
+    fig.savefig("heatmap_raw.png", bbox_inches='tight')
+    img = PIL.Image.open("heatmap_raw.png")
+    img = img.resize((320, 240))  # M5Core2 screen resolution
+    img.save("heatmap320.png")
+    print("✅ Saved: heatmap320.png (ready for M5Core2)")
+
+# Save after GUI closes
 root.mainloop()
+save_png_for_core2()
