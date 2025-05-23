@@ -22,7 +22,7 @@
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/mqtt.h>
-#include <zephyr/json/json.h>
+#include <zephyr/data/json.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/random/random.h>
 
