@@ -1,4 +1,3 @@
-
 #include <zephyr/kernel.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -6,23 +5,23 @@
 #include <zephyr/bluetooth/hci.h>  
 #include <zephyr/data/json.h>
 #include <string.h>
-#include <thingy52_sensors.h>
 
 #define NUM_OF_SENSORS 2
 
-struct SensorJSON {
-    char temp[10], hum[10], gas[10], acc_x[10], acc_y[10], acc_z[10];
+struct SensorVal {
+	float lat, lon;
+    int temp, hum, gas;
+	float acc;
 };
 
-static const struct bt_data ad[] = {
-    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-    BT_DATA_BYTES(BT_DATA_UUID16_ALL,
-        0x0f, 0x18)  
+struct SensorJSON {
+	float lat, lon, acc;
+    int temp, hum, gas;
 };
 
 static const char* mobile_mac =	"D8:7F:34:A5:D7:B4";
 
-struct SensorValues values[NUM_OF_SENSORS];
+struct SensorVal values[NUM_OF_SENSORS];
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	struct net_buf_simple *ad) {
@@ -41,12 +40,16 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 
 	if (strcmp(mac_addr, mobile_mac) == 0) {
 		for (int i = 0; i < NUM_OF_SENSORS; i++) {
-			values[i].temp = (double) ad->data[5 + (12 * i)] + (double) ad->data[6 + (12 * i)] / 10;
-			values[i].hum = (double) ad->data[7 + (12 * i)] + (double) ad->data[8 + (12 * i)] / 10;
-			values[i].gas = (double) ((ad->data[9 + (12 * i)] << 8) | ad->data[10 + (12 * i)]);
-			values[i].accel[0] = (double) ad->data[11 + (12 * i)] + (double) ad->data[12 + (12 * i)] / 10;
-			values[i].accel[1] = (double) ad->data[13 + (12 * i)] + (double) ad->data[14 + (12 * i)] / 10;
-			values[i].accel[2] = (double) ad->data[15 + (12 * i)] + (double) ad->data[16 + (12 * i)] / 10;
+			values[i].lat = (double) ad->data[0 + (6 * i)] + (double) ad->data[1 + (6 * i)] / 100 +
+				(double) ad->data[2 + (6 * i)] / 10000 + (double) ad->data[3 + (6 * i)] / 1000000;
+				
+			values[i].lon = (double) ad->data[4 + (6 * i)] + (double) ad->data[5 + (6 * i)] / 100 +
+				(double) ad->data[6 + (6 * i)] / 10000 + (double) ad->data[7 + (6 * i)] / 1000000;
+			
+			values[i].temp = ad->data[8 + (6 * i)];
+			values[i].hum = ad->data[9 + (6 * i)];
+			values[i].gas = (ad->data[10 + (6 * i)] << 8) | ad->data[11 + (6 * i)];
+			values[i].acc = (double) ad->data[12 + (6 * i)] + (double) ad->data[13 + (6 * i)] / 100;
 		}
 	}
 }
@@ -76,35 +79,39 @@ int main(void) {
 	printk("Started scanning...\n");
 
 	static const struct json_obj_descr sensor_descr[] = {
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_STRING),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_STRING),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_STRING),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc_x, JSON_TOK_STRING),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc_y, JSON_TOK_STRING),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc_z, JSON_TOK_STRING),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat, JSON_TOK_FLOAT_FP),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon, JSON_TOK_FLOAT_FP),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_FLOAT_FP)
 	};
 
 	while (1) {
 
-		struct SensorJSON jsonData;
+		for (int i = 0; i < NUM_OF_SENSORS; i++) {
+			struct SensorJSON jsonData;
+			jsonData.lat = values[i].lat;
+			jsonData.lon = values[i].lon;
+			jsonData.temp = values[i].temp;
+			jsonData.hum = values[i].hum;
+			jsonData.gas = values[i].gas;
+			jsonData.acc = values[i].acc;
 
-		sprintf(jsonData.temp, "%.1f", values[])
-
-		char jsonBuf[128];
-        int ret = json_obj_encode_buf(sensor_descr,
-                                          ARRAY_SIZE(sensor_descr),
-                                          &data,
-                                          jsonBuf,
-                                          sizeof(jsonBuf));
-        if (ret != 0) {
-			printk("JSON error\n");
-		} else {
-			printk("%s\n", jsonBuf);
+			char jsonBuf[128];
+			int ret = json_obj_encode_buf(sensor_descr,
+											ARRAY_SIZE(sensor_descr),
+											&jsonData,
+											jsonBuf,
+											sizeof(jsonBuf));
+			if (ret != 0) {
+				printk("JSON error\n");
+			} else {
+				printk("%s\n", jsonBuf);
+			}
 		}
 		
 		k_msleep(500);
-	}
-
- 
+	} 
 }
  
