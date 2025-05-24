@@ -4,9 +4,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/scan.h>
-#include <sys/byteorder.h>
-#include <sys/printk.h>
+#include <zephyr/sys/byteorder.h>
 #include <string.h>
 
 #define NUM_OF_SENSORS 		2
@@ -47,8 +45,8 @@ static bool parse_gps(struct bt_data *data, void *user_data)
             float lon = lon_i / 1e6f;
             printk("[GPS] lat=%.6f, lon=%.6f\n", lat, lon);
             /* store latest GPS into locations[0] if desired */
-            locations[0][LAT_INDEX] = lat;
-            locations[0][LON_INDEX] = lon;
+            locations[0][LAT] = lat;
+            locations[0][LON] = lon;
         }
     }
     return true;
@@ -58,18 +56,18 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	struct net_buf_simple *ad) {
 
 	char addr_str[BT_ADDR_LE_STR_LEN];
-	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+	char mac_addr[18];
 
 	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
-    strncpy(mac_str, addr_str, 17);
-    mac_str[17] = '\0';
+    strncpy(mac_addr, addr_str, 17);
+    mac_addr[17] = '\0';
 
 	bt_data_parse(ad, parse_gps, NULL);
 
 	for (int i = 0; i < NUM_OF_SENSORS; i++) {
 		if (strcmp(mac_addr, sensor_mac[i]) == 0) {
 			if (ad->len >= 5 + NUM_OF_SENSOR_BYTES) {
-                memcpy(recv_data[i], &ad->data[5], NUM_OF_SENSOR_BYTES);
+                memcpy(recv[i], &ad->data[5], NUM_OF_SENSOR_BYTES);
             }
 			break;
 		}
@@ -120,17 +118,17 @@ int main(void) {
             /* Insert GPS or sensor data into allData array */
             int base = i * BYTES_PER_SENSOR;
             /* pack latitude (2 bytes int16 + 2 bytes frac16) */
-            int16_t lat_whole = (int16_t)locations[i][LAT_INDEX];
-            int32_t lat_frac = (int32_t)((locations[i][LAT_INDEX] - lat_whole) * 1e6);
+            int16_t lat_whole = (int16_t)locations[i][LAT];
+            int32_t lat_frac = (int32_t)((locations[i][LAT] - lat_whole) * 1e6);
             sys_put_le16(lat_whole, &allData[base]);
             sys_put_le16((int16_t)(lat_frac & 0xFFFF), &allData[base + 2]);
             /* pack longitude */
-            int16_t lon_whole = (int16_t)locations[i][LON_INDEX];
-            int32_t lon_frac = (int32_t)((locations[i][LON_INDEX] - lon_whole) * 1e6);
+            int16_t lon_whole = (int16_t)locations[i][LON];
+            int32_t lon_frac = (int32_t)((locations[i][LON] - lon_whole) * 1e6);
             sys_put_le16(lon_whole, &allData[base + 4]);
             sys_put_le16((int16_t)(lon_frac & 0xFFFF), &allData[base + 6]);
             /* copy sensor raw data */
-            memcpy(&allData[base + 8], recv_data[i], NUM_OF_SENSOR_BYTES);
+            memcpy(&allData[base + 8], recv[i], NUM_OF_SENSOR_BYTES);
         }
 
 		struct bt_data adv[] = {
