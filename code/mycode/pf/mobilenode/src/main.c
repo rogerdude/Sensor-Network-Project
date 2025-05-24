@@ -132,7 +132,6 @@ int main(void) {
             /* copy sensor raw data */
             memcpy(&allData[base + 8], recv_data[i], NUM_OF_SENSOR_BYTES);
         }
-		}
 
 		struct bt_data adv[] = {
             BT_DATA(BT_DATA_MANUFACTURER_DATA, allData, TOTAL_BYTES),
