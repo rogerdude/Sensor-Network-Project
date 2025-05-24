@@ -5,3 +5,6 @@
 1 = d1:31:a2:eb:63:2a
 0 = d8:7f:34:a5:d7:b4
 ```
+
+## Phone GPS
+btcommon.eir_ad.entry.type == 0xFF && btcommon.eir_ad.entry.company_id == 0xFFFF

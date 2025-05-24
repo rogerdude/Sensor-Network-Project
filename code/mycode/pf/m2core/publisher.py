@@ -3,21 +3,27 @@ import time
 import json
 import random               # just for demo
 import paho.mqtt.client as mqtt
+import math
+CENTER_LAT      = -27.499488
+LON_DEG_PER_M   = 1.0 / (111000.0 * math.cos(math.radians(CENTER_LAT)))
+CENTER_LON      = 153.014495
+GRID_SPAN_M     = 100.0
+LAT_DEG_PER_M   = 1.0 / 111000.0
 
-BROKER = "10.0.0.3"
+BROKER = "127.0.0.1"
 PORT   = 1883
 TOPIC  = "m5core2/geo_severity"
 QOS    = 1
 
 def get_sensor_data():
-    """
-    Replace this with your real data-acquisition logic.
-    Here we just generate random coords + severity.
-    """
+    # pick a random offset in metres within ±100 m
+    lat_off_m = random.uniform(-GRID_SPAN_M, GRID_SPAN_M)
+    lon_off_m = random.uniform(-GRID_SPAN_M, GRID_SPAN_M)
+
     return {
-        "longitude": 153.0 + random.random()*0.01,
-        "latitude": -27.4  + random.random()*0.01,
-        "severity": random.randint(0,5)
+        "latitude":  CENTER_LAT  + lat_off_m * LAT_DEG_PER_M,
+        "longitude": CENTER_LON  + lon_off_m * LON_DEG_PER_M,
+        "severity":  random.randint(0,2)  # 0=green,1=yellow,2=red
     }
 
 def main():
