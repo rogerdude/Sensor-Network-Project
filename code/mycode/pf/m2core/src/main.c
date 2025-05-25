@@ -10,10 +10,14 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
 #include <zephyr/kernel.h>
-#include <zephyr/shell/shell.h>
 #include <zephyr/logging/log.h>
 #include <lvgl.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/sys/byteorder.h>
+#include <string.h>
 #include <math.h>
+#include <zephyr/data/json.h>
 
 LOG_MODULE_REGISTER(viewer, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -42,31 +46,38 @@ static const float LAT_DEG_PER_M = 1.0f / 111000.0f;
 static float LON_DEG_PER_M;
 
 /* Pre-calc cell pixel size */
-static int cell_w;
-static int cell_h;
+static int cell_w, cell_h;
 
 /* Persistent arrays for line endpoints */
 static lv_point_t vline_pts[COLS + 1][2];
 static lv_point_t hline_pts[ROWS + 1][2];
 
+struct BleJSON {
+    float lat;
+    float lon;
+    int   severity;
+};
+
+static const struct json_obj_descr ble_descr[] = {
+    JSON_OBJ_DESCR_PRIM(struct BleJSON, lat,      JSON_TOK_FLOAT),
+    JSON_OBJ_DESCR_PRIM(struct BleJSON, lon,      JSON_TOK_FLOAT),
+    JSON_OBJ_DESCR_PRIM(struct BleJSON, severity, JSON_TOK_INT64),
+};
+
 static void draw_grid(void) {
     cell_w = SCREEN_WIDTH / COLS;
     cell_h = SCREEN_HEIGHT / ROWS;
     for (int i = 0; i <= COLS; i++) {
-        vline_pts[i][0].x = i * cell_w;
-        vline_pts[i][0].y = 0;
-        vline_pts[i][1].x = i * cell_w;
-        vline_pts[i][1].y = SCREEN_HEIGHT;
+        vline_pts[i][0] = (lv_point_t){ .x = i * cell_w, .y = 0 };
+        vline_pts[i][1] = (lv_point_t){ .x = i * cell_w, .y = SCREEN_HEIGHT };
         lv_obj_t *ln = lv_line_create(lv_scr_act());
         lv_line_set_points(ln, vline_pts[i], 2);
         lv_obj_set_style_line_color(ln, lv_color_black(), 0);
         lv_obj_set_style_line_width(ln, 1, 0);
     }
     for (int i = 0; i <= ROWS; i++) {
-        hline_pts[i][0].x = 0;
-        hline_pts[i][0].y = i * cell_h;
-        hline_pts[i][1].x = SCREEN_WIDTH;
-        hline_pts[i][1].y = i * cell_h;
+        hline_pts[i][0] = (lv_point_t){ .x = 0, .y = i * cell_h };
+        hline_pts[i][1] = (lv_point_t){ .x = SCREEN_WIDTH, .y = i * cell_h };
         lv_obj_t *ln = lv_line_create(lv_scr_act());
         lv_line_set_points(ln, hline_pts[i], 2);
         lv_obj_set_style_line_color(ln, lv_color_black(), 0);
@@ -99,19 +110,40 @@ static void update_from_geo(float lat, float lon, int severity) {
     color_cell(row, col, severity);
 }
 
-static int cmd_geo_update(const struct shell *shell, size_t argc, char **argv) {
-    if (argc != 4) {
-        shell_print(shell, "Usage: geo_update <lat> <lon> <severity>");
-        return -EINVAL;
+static bool parse_sensor_json(struct bt_data *data, void *user_data)
+{
+    if (data->type != BT_DATA_MANUFACTURER_DATA) {
+        return true;
     }
-    float lat = atof(argv[1]);
-    float lon = atof(argv[2]);
-    int sev = atoi(argv[3]);
-    update_from_geo(lat, lon, sev);
-    shell_print(shell, "Updated cell for (%.6f,%.6f) sev %d", lat, lon, sev);
-    return 0;
+
+    char buf[64];
+    int len = MIN(data->data_len, sizeof(buf)-1);
+    memcpy(buf, data->data, len);
+    buf[len] = '\0';
+
+    struct BleJSON pkt;
+    int err = json_obj_parse(ble_descr,
+                                 ARRAY_SIZE(ble_descr),
+                                 &pkt,
+                                 buf,
+                                 strlen(buf)+1);
+    if (err == 0) {
+        update_from_geo(pkt.lat, pkt.lon, pkt.severity);
+        return false;
+    } else {
+        LOG_WRN("Failed JSON parse (%d): %s", err, buf);
+    }
+    return true;
 }
-SHELL_CMD_REGISTER(geo_update, NULL, "Update grid from geo coords", cmd_geo_update);
+
+static void device_found(const bt_addr_le_t *addr, int8_t rssi,
+                         uint8_t type, struct net_buf_simple *ad) {
+    char addr_str[BT_ADDR_LE_STR_LEN];
+    bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+    if (strcmp(addr_str, "CF:E1:0A:1C:80:C7") == 0) {
+         bt_data_parse(ad, parse_sensor_json, NULL);
+    }
+}
 
 int main(void) {
     const struct device *disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
@@ -123,20 +155,27 @@ int main(void) {
     lv_init();
     lv_obj_clean(lv_scr_act());
     draw_grid();
-
-    /* Center test */
-    update_from_geo(CENTER_LAT, CENTER_LON, 0);
-    /* Four corners: NW, NE, SW, SE */
-    update_from_geo(CENTER_LAT + GRID_SPAN_M * LAT_DEG_PER_M,
-                    CENTER_LON - GRID_SPAN_M * LON_DEG_PER_M, 1);
-    update_from_geo(CENTER_LAT + GRID_SPAN_M * LAT_DEG_PER_M,
-                    CENTER_LON + GRID_SPAN_M * LON_DEG_PER_M, 2);
-    update_from_geo(CENTER_LAT - GRID_SPAN_M * LAT_DEG_PER_M,
-                    CENTER_LON - GRID_SPAN_M * LON_DEG_PER_M, 2);
-    update_from_geo(CENTER_LAT - GRID_SPAN_M * LAT_DEG_PER_M,
-                    CENTER_LON + GRID_SPAN_M * LON_DEG_PER_M, 1);
-
     display_blanking_off(disp);
+
+    /* Enable Bluetooth scanning */
+    int err = bt_enable(NULL);
+    if (err) {
+        LOG_ERR("BT init failed (%d)", err);
+        return 0;
+    }
+    struct bt_le_scan_param sp = {
+        .type    = BT_LE_SCAN_TYPE_PASSIVE,
+        .options = BT_LE_SCAN_OPT_NONE,
+        .interval= BT_GAP_SCAN_FAST_INTERVAL,
+        .window  = BT_GAP_SCAN_FAST_WINDOW,
+    };
+    err = bt_le_scan_start(&sp, device_found);
+    if (err) {
+        LOG_ERR("BT scan failed (%d)", err);
+    } else {
+        LOG_INF("BT scanning...");
+    }
+
     while (1) {
         lv_timer_handler();
         k_msleep(10);

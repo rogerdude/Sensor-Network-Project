@@ -7,5 +7,5 @@ project(pf)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../mylib)
 
 target_sources(app PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mqtt.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
 )
