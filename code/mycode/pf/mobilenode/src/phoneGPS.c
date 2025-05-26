@@ -144,7 +144,6 @@ int main(void) {
 
         k_msleep(1000);
 	}
-
 }
 
 

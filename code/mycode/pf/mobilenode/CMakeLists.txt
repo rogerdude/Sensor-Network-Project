@@ -2,12 +2,10 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(mobilenode)
+project(pf)
 
-set(mylib_src_dir ${CMAKE_SOURCE_DIR}/../../mylib)
-set(mylib_inc_dir ${CMAKE_SOURCE_DIR}/../../include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../mylib)
 
-FILE(GLOB app_sources src/*.c) 
-
-target_sources(app PRIVATE ${app_sources} ${lib_sources})
-target_include_directories(app PRIVATE ${mylib_inc_dir})
+target_sources(app PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
+)

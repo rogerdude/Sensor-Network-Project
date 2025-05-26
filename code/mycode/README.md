@@ -9,5 +9,7 @@
 btcommon.eir_ad.entry.type == 0xFF && btcommon.eir_ad.entry.company_id == 0xFFFF
 
 ## Base Node
-CF:E1:0A:1C:80:C7
+light blue: CF:E1:0A:1C:80:C7<br>
+or<br>
+dark blue: ed:f1:9c:e4:53:e8
 ```

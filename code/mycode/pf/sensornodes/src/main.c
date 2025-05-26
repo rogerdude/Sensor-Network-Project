@@ -6,19 +6,40 @@
 #include <thingy52_sensors.h>
 #include <thingy52_gas_colour.h>
 #include <math.h>
+#include <myconfig.h>
 
-#ifndef IBEACON_RSSI
-#define IBEACON_RSSI 0xc8
-#endif
+#define BYTES_PER_SENSOR 17
+
+static const char* sensor_uuid = SENSOR_UUID;
+static const char* mobile_uuid = MOBILE_UUID;
 
 static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, 0x0f, 0x18)  
 };
 
-// static const struct bt_data sd[] = {
-// 	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME)),
-// };
+static uint8_t id = 1;
+static uint8_t stopped = 0;
+
+static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
+	struct net_buf_simple *ad) {
+    
+    char name[7];
+	for (int i = 2; i < (2 + UUID_SIZE); i++) {
+        name[i - 2] = ad->data[i];
+    }
+    name[6] = '\0';
+
+    if (strcmp(name, mobile_uuid) == 0) {
+        for (int i = 8; i < ad->len; i += BYTES_PER_SENSOR) {
+            // check if enabled
+            if (id == ad->data[i]) {
+                stopped = ad->data[i + 1];
+                break;
+            }
+        }
+    }
+}
 
 int main(void) {
 
@@ -27,7 +48,7 @@ int main(void) {
         return -1;
     } else {
         printk("RGB LED initialised\n");
-        thingy52_rgb_colour_set(MAGENTA);
+        thingy52_rgb_colour_set(BLUE);
     }
 
     if (init_thingy52_sensors() != 0) {
@@ -45,9 +66,14 @@ int main(void) {
 
 	printk("Bluetooth initialised\n");
 
+	err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
+	if (err) {
+		printk("Start scanning failed (err %d)\n", err);
+		return 0;
+	}
+	printk("Started scanning...\n");
+
 	/* Start advertising */
-	// err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad),
-	// 	sd, ARRAY_SIZE(sd));
     err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad),
 		NULL, 0);
 
@@ -59,37 +85,37 @@ int main(void) {
     struct SensorData data;
     struct SensorValues values;
 
+    uint8_t allData[29] = {0};
+
     while (1) {
 
         thingy52_process_sample(&data);
         thingy52_convert_data(&data, &values);
-
-        printk("temp: %.1f C, hum: %.1f %%, gas: %.1f eTVOC, accel x: %.1f, y: %.1f, z: %.1f\n",
-            values.temp, values.hum, values.gas,
-            values.accel[0], values.accel[1], values.accel[2]);
         
         float acc_combined = sqrtf(powf(values.accel[0], 2.0) + powf(values.accel[1], 2.0) + powf(values.accel[1], 2.0));
         int acc_int = (int) acc_combined;
         int acc_dec = (int) ((acc_combined - (float) acc_int) * 100);
 
+        printk("temp: %.1f C, hum: %.1f %%, gas: %.1f eTVOC, accel total: %.2f, x: %.1f, y: %.1f, z: %.1f\n",
+            values.temp, values.hum, values.gas, (double) acc_combined,
+            values.accel[0], values.accel[1], values.accel[2]);
+
+        for (int i = 0; i < UUID_SIZE; i++) {
+            allData[i] = sensor_uuid[i];
+        }
+        allData[UUID_SIZE] = id;
+        allData[UUID_SIZE + 1] = data.temp.val1;
+        allData[UUID_SIZE + 2] = data.hum.val1;
+        allData[UUID_SIZE + 3] = data.gas.val1 >> 8;
+        allData[UUID_SIZE + 4] = data.gas.val1 & 0xFF;
+        allData[UUID_SIZE + 5] = acc_int;
+        allData[UUID_SIZE + 6] = acc_dec;
+
         struct bt_data adv[] = {
-            BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
-            BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA,
-                    data.temp.val1,
-                    data.hum.val1,
-                    data.gas.val1 >> 8,
-                    data.gas.val1 && 0xFF,
-                    acc_int,
-                    acc_dec,
-                    0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00,
-                    IBEACON_RSSI),
+            BT_DATA(BT_DATA_MANUFACTURER_DATA, allData, 29)
         };
 
         err = bt_le_adv_update_data(adv, ARRAY_SIZE(adv), NULL, 0);
-        // err = bt_le_adv_update_data(adv, ARRAY_SIZE(adv), sd, ARRAY_SIZE(sd));
 
         if (err) {
             printk("adv_update failed: %d\n", err);
