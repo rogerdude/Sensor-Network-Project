@@ -5,6 +5,7 @@
 #include <zephyr/bluetooth/hci.h>  
 #include <zephyr/data/json.h>
 #include <string.h>
+#include <stdio.h>
 
 #define NUM_OF_SENSORS 2
 
@@ -16,12 +17,14 @@ struct SensorVal {
 
 struct SensorJSON {
 	float lat, lon, acc;
-    int temp, hum, gas;
+    int temp, hum, gas, severity;
 };
 
 static const char* mobile_mac =	"D8:7F:34:A5:D7:B4";
 
 struct SensorVal values[NUM_OF_SENSORS];
+
+static const struct bt_data adv_init[] = {};
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	struct net_buf_simple *ad) {
@@ -54,6 +57,15 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	}
 }
 
+int get_severity(int temp, int hum, int gas, float acc) {
+	if (temp > 30 || hum > 70 || gas > 1000 || acc > 2.0) {
+		return 2; // High severity
+	} else if (temp > 25 || hum > 50 || gas > 500 || acc > 1.0) {
+		return 1; // Medium severity
+	}
+	return 0; // Low severity
+}
+
 int main(void) {
 	/* Initialize the Bluetooth Subsystem */
 	int err = bt_enable(NULL);
@@ -78,14 +90,27 @@ int main(void) {
 	}
 	printk("Started scanning...\n");
 
+	err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, adv_init, 0, NULL, 0);
+    if (err) {
+        printk("Advertising start failed (err %d)\n", err);
+        return;
+    }
+    printk("Advertising started\n");
+
 	static const struct json_obj_descr sensor_descr[] = {
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat, JSON_TOK_FLOAT_FP),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon, JSON_TOK_FLOAT_FP),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_FLOAT_FP)
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat, JSON_TOK_FLOAT),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon, JSON_TOK_FLOAT),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT64),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT64),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT64),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_FLOAT)
 	};
+
+	static const struct json_obj_descr ble_descr[] = {
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat,      JSON_TOK_FLOAT),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon,      JSON_TOK_FLOAT),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, severity, JSON_TOK_INT64),
+};
 
 	while (1) {
 
@@ -97,7 +122,9 @@ int main(void) {
 			jsonData.hum = values[i].hum;
 			jsonData.gas = values[i].gas;
 			jsonData.acc = values[i].acc;
+			jsonData.severity = get_severity(values[i].temp, values[i].hum, values[i].gas, values[i].acc);
 
+			// UART
 			char jsonBuf[128];
 			int ret = json_obj_encode_buf(sensor_descr,
 											ARRAY_SIZE(sensor_descr),
@@ -109,6 +136,33 @@ int main(void) {
 			} else {
 				printk("%s\n", jsonBuf);
 			}
+
+			// BLE
+			char bleBuf[64];
+        	int ret_ble = json_obj_encode_buf(ble_descr,
+                                          ARRAY_SIZE(ble_descr),
+                                          &jsonData,
+                                          bleBuf,
+                                          sizeof(bleBuf));
+			
+			if (ret_ble != 0) {
+				printk("BLE JSON error\n");
+			} else {
+				printk("BLE: %s\n", bleBuf);
+			}
+
+			struct bt_data adv_data[] = {
+                BT_DATA(BT_DATA_MANUFACTURER_DATA,
+                        (const uint8_t *)bleBuf,
+                        strlen(bleBuf))
+            };
+
+            err = bt_le_adv_update_data(adv_data,
+                                        ARRAY_SIZE(adv_data),
+                                        NULL, 0);
+            if (err) {
+                printk("adv_update failed: %d\n", err);
+            }
 		}
 		
 		k_msleep(500);
