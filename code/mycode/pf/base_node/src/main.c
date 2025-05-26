@@ -6,6 +6,7 @@
 #include <zephyr/data/json.h>
 #include <string.h>
 #include <stdio.h>
+#include <zephyr/sys/byteorder.h>
 
 #define NUM_OF_SENSORS 2
 
@@ -106,11 +107,6 @@ int main(void) {
 		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_FLOAT)
 	};
 
-	static const struct json_obj_descr ble_descr[] = {
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat,      JSON_TOK_FLOAT),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon,      JSON_TOK_FLOAT),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, severity, JSON_TOK_INT64),
-};
 
 	while (1) {
 
@@ -138,31 +134,27 @@ int main(void) {
 			}
 
 			// BLE
-			char bleBuf[64];
-        	int ret_ble = json_obj_encode_buf(ble_descr,
-                                          ARRAY_SIZE(ble_descr),
-                                          &jsonData,
-                                          bleBuf,
-                                          sizeof(bleBuf));
-			
-			if (ret_ble != 0) {
-				printk("BLE JSON error\n");
-			} else {
-				printk("BLE: %s\n", bleBuf);
-			}
+			int32_t lat_enc = (int32_t)lroundf(jsonData.lat * 1e6f);
+			int32_t lon_enc = (int32_t)lroundf(jsonData.lon * 1e6f);
+
+			//9 byte [lat(4), lon(4), sev(1)]
+			uint8_t mfg_data[9];
+			sys_put_le32(lat_enc, &mfg_data[0]);
+			sys_put_le32(lon_enc, &mfg_data[4]);
+			mfg_data[8] = (uint8_t)jsonData.severity;
 
 			struct bt_data adv_data[] = {
-                BT_DATA(BT_DATA_MANUFACTURER_DATA,
-                        (const uint8_t *)bleBuf,
-                        strlen(bleBuf))
-            };
+				BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
+				BT_DATA(BT_DATA_MANUFACTURER_DATA,
+						mfg_data, sizeof(mfg_data)),
+			};
 
-            err = bt_le_adv_update_data(adv_data,
-                                        ARRAY_SIZE(adv_data),
-                                        NULL, 0);
-            if (err) {
-                printk("adv_update failed: %d\n", err);
-            }
+			err = bt_le_adv_update_data(adv_data,
+										ARRAY_SIZE(adv_data),
+										NULL, 0);
+			if (err) {
+				printk("adv_update failed: %d\n", err);
+			}
 		}
 		
 		k_msleep(500);
