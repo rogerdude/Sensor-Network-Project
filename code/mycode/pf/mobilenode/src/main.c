@@ -4,7 +4,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/hci.h>
-#include <zephyr/sys/byteorder.h>
+#include <zephyr/drivers/gnss.h>
 #include <string.h>
 #include <myconfig.h>
 
@@ -24,34 +24,45 @@ static const struct bt_data ad[] = {
         0x0f, 0x18)  
 };
 
-static const char* sensor_mac[NUM_OF_SENSORS] = {
-	"C9:2B:FC:6A:D3:C0",
-	"D1:31:A2:EB:63:2A"
-};
-
 static const char* sensor_uuid = SENSOR_UUID;
 static const char* mobile_uuid = MOBILE_UUID;
+static const char* base_uuid = BASE_UUID;
 
-uint8_t recv[NUM_OF_SENSORS][NUM_OF_SENSOR_BYTES] = {0};
+uint8_t recv[NUM_OF_SENSORS][NUM_OF_SENSOR_BYTES + 1] = {0};
 float locations[NUM_OF_SENSORS][2] = {0};
+uint8_t stopped[NUM_OF_SENSORS] = {0};
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	struct net_buf_simple *ad) {
-	char addr_str[BT_ADDR_LE_STR_LEN];
-	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
 
-	char mac_addr[18];
-	for (int i = 0; i < 17; i++) {
-		mac_addr[i] = addr_str[i];
-	}
-	mac_addr[17] = '\0';
+	if (ad->len < (2 + UUID_SIZE)) {
+        return;
+    }
 
-	for (int i = 0; i < NUM_OF_SENSORS; i++) {
-		if (strcmp(mac_addr, sensor_mac[i]) == 0) {
-			for (int j = 5; j < (5 + NUM_OF_SENSOR_BYTES); j++) {
-				recv[i][j - 5] = ad->data[j];
+	char name[7];
+	for (int i = 2; i < (2 + UUID_SIZE); i++) {
+        name[i - 2] = ad->data[i];
+    }
+    name[6] = '\0';
+
+    if (strcmp(name, sensor_uuid) == 0) {
+		// Get id
+		int id = ad->data[2];
+		if (id < NUM_OF_SENSORS) {
+			// Get data
+			for (int j = 8; j < (8 + NUM_OF_SENSOR_BYTES); j++) {
+				recv[id][j - 8] = ad->data[j];
 			}
-			break;
+			// Update location
+			if (rssi > (-50)) {
+
+			}
+		}
+	} else if (strcmp(name, base_uuid) == 0) {
+		// get stopped status from base
+		for (int i = 8; i < ad->len; i += 11) {
+			int id = ad->data[i];
+			stopped[id] = ad->data[i + 1];
 		}
 	}
 }
@@ -123,8 +134,6 @@ int main(void) {
 	for (int i = 0; i < UUID_SIZE; i++) {
         allData[i] = mobile_uuid[i];
     }
-
-	uint8_t stopped[NUM_OF_SENSORS] = {0};
 
 	while (1) {
 		stop_adv(adv);

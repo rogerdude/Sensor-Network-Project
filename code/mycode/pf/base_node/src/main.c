@@ -2,15 +2,20 @@
 #include <zephyr/settings/settings.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/hci.h>  
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/shell/shell.h>  
 #include <zephyr/data/json.h>
 #include <string.h>
-#include <stdio.h>
+#include <math.h>
+#include <stdlib.h>
 #include <zephyr/sys/byteorder.h>
+#include <myconfig.h>
 
 #define NUM_OF_SENSORS 2
+#define BYTES_PER_SENSOR 17
 
 struct SensorVal {
+	int id, stopped;
 	float lat, lon;
     int temp, hum, gas;
 	float acc;
@@ -18,50 +23,77 @@ struct SensorVal {
 
 struct SensorJSON {
 	float lat, lon, acc;
-    int temp, hum, gas, severity;
+    int id, temp, hum, gas, severity;
 };
 
-static const char* mobile_mac =	"D8:7F:34:A5:D7:B4";
+static const char* mobile_uuid = MOBILE_UUID;
 
 struct SensorVal values[NUM_OF_SENSORS];
+uint8_t stopped[NUM_OF_SENSORS] = {0};
+K_MUTEX_DEFINE(stopped_mutex);
 
-static const struct bt_data adv_init[] = {};
+static const struct bt_data adv_init[] = {
+    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+    BT_DATA_BYTES(BT_DATA_UUID16_ALL, 0x0f, 0x18)  
+};
 
-static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
-	struct net_buf_simple *ad) {
-	char addr_str[BT_ADDR_LE_STR_LEN];
-	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+static int cmd_stop(const struct shell *sh, size_t argc, char **argv) {
 
-	if (ad->len < 28) {
-		return;
+    k_mutex_lock(&stopped_mutex, K_FOREVER);
+    int id = atoi(argv[1]);
+	if (id > NUM_OF_SENSORS) {
+		shell_print(sh, "Invalid ID\n");
+		return -1;
 	}
-
-	char mac_addr[18];
-	for (int i = 0; i < 17; i++) {
-		mac_addr[i] = addr_str[i];
+	if (argv[2]) {
+		stopped[id] = 1;
+	} else {
+		stopped[id] = 0;
 	}
-	mac_addr[17] = '\0';
+    k_mutex_unlock(&stopped_mutex);
 
-	if (strcmp(mac_addr, mobile_mac) == 0) {
-		for (int i = 0; i < NUM_OF_SENSORS; i++) {
-			values[i].lat = (double) ad->data[0 + (6 * i)] + (double) ad->data[1 + (6 * i)] / 100 +
-				(double) ad->data[2 + (6 * i)] / 10000 + (double) ad->data[3 + (6 * i)] / 1000000;
-				
-			values[i].lon = (double) ad->data[4 + (6 * i)] + (double) ad->data[5 + (6 * i)] / 100 +
-				(double) ad->data[6 + (6 * i)] / 10000 + (double) ad->data[7 + (6 * i)] / 1000000;
-			
-			values[i].temp = ad->data[8 + (6 * i)];
-			values[i].hum = ad->data[9 + (6 * i)];
-			values[i].gas = (ad->data[10 + (6 * i)] << 8) | ad->data[11 + (6 * i)];
-			values[i].acc = (double) ad->data[12 + (6 * i)] + (double) ad->data[13 + (6 * i)] / 100;
-		}
-	}
+    return 0;
 }
 
+static void scan_recv(const struct bt_le_scan_recv_info *info,
+		      struct net_buf_simple *buf) {
+
+    if (buf->len < (2 + UUID_SIZE)) {
+        return;
+    }
+
+    char name[7];
+	for (int i = 2; i < (2 + UUID_SIZE); i++) {
+        name[i - 2] = buf->data[i];
+    }
+    name[6] = '\0';
+
+    if (strcmp(name, mobile_uuid) == 0) {
+        for (int i = 8; i < buf->len; i += BYTES_PER_SENSOR) {
+			int id = buf->data[i];
+			values[id].id = id;
+            values[id].lat = (double) buf->data[i + 2] + (double) buf->data[i + 3] / 100 +
+				(double) buf->data[i + 4] / 10000 + (double) buf->data[i + 5] / 1000000;
+				
+			values[id].lon = (double) buf->data[i + 6] + (double) buf->data[i + 7] / 100 +
+				(double) buf->data[i + 8] / 10000 + (double) buf->data[i + 9] / 1000000;
+			
+			values[id].temp = buf->data[i + 10];
+			values[id].hum = buf->data[i + 11];
+			values[id].gas = (buf->data[i + 12] << 8) | buf->data[i + 13];
+			values[id].acc = (double) buf->data[i + 14] + (double) buf->data[i + 15] / 100;
+        }
+    }
+}
+
+static struct bt_le_scan_cb scan_callbacks = {
+	.recv = scan_recv,
+};
+
 int get_severity(int temp, int hum, int gas, float acc) {
-	if (temp > 30 || hum > 70 || gas > 1000 || acc > 2.0) {
+	if (temp > 30 || hum > 70 || gas > 500 || (double) acc > 2.0) {
 		return 2; // High severity
-	} else if (temp > 25 || hum > 50 || gas > 500 || acc > 1.0) {
+	} else if (temp > 25 || hum > 50 || gas > 500 || (double) acc > 1.0) {
 		return 1; // Medium severity
 	}
 	return 0; // Low severity
@@ -84,7 +116,9 @@ int main(void) {
 		.window     = BT_GAP_SCAN_FAST_WINDOW,
 	};
 
-	err = bt_le_scan_start(&scan_param, device_found);
+    bt_le_scan_cb_register(&scan_callbacks);
+
+	err = bt_le_scan_start(&scan_param, NULL);
 	if (err) {
 		printk("Start scanning failed (err %d)\n", err);
 		return 0;
@@ -94,24 +128,27 @@ int main(void) {
 	err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, adv_init, 0, NULL, 0);
     if (err) {
         printk("Advertising start failed (err %d)\n", err);
-        return;
+        return -1;
     }
     printk("Advertising started\n");
 
 	static const struct json_obj_descr sensor_descr[] = {
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat, JSON_TOK_FLOAT),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon, JSON_TOK_FLOAT),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT64),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT64),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT64),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_FLOAT)
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, id, JSON_TOK_INT),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat, JSON_TOK_FLOAT_FP),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon, JSON_TOK_FLOAT_FP),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_FLOAT_FP)
 	};
-
 
 	while (1) {
 
+		uint8_t mfg_data[11 * NUM_OF_SENSORS];
+
 		for (int i = 0; i < NUM_OF_SENSORS; i++) {
 			struct SensorJSON jsonData;
+			jsonData.id = i;
 			jsonData.lat = values[i].lat;
 			jsonData.lon = values[i].lon;
 			jsonData.temp = values[i].temp;
@@ -137,27 +174,29 @@ int main(void) {
 			int32_t lat_enc = (int32_t)lroundf(jsonData.lat * 1e6f);
 			int32_t lon_enc = (int32_t)lroundf(jsonData.lon * 1e6f);
 
-			//9 byte [lat(4), lon(4), sev(1)]
-			uint8_t mfg_data[9];
-			sys_put_le32(lat_enc, &mfg_data[0]);
-			sys_put_le32(lon_enc, &mfg_data[4]);
-			mfg_data[8] = (uint8_t)jsonData.severity;
+			// 11 byte [id, stop, lat(4), lon(4), sev(1)]
+			mfg_data[11 * i] = i;
+			mfg_data[1 + (11 * i)] = stopped[i];
+			sys_put_le32(lat_enc, &mfg_data[2 + (11 * i)]);
+			sys_put_le32(lon_enc, &mfg_data[6 + (11 * i)]);
+			mfg_data[10 + (11 * i)] = (uint8_t)jsonData.severity;
+		}
 
-			struct bt_data adv_data[] = {
+		struct bt_data adv_data[] = {
 				BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
 				BT_DATA(BT_DATA_MANUFACTURER_DATA,
-						mfg_data, sizeof(mfg_data)),
-			};
+						mfg_data, 11 * NUM_OF_SENSORS),
+		};
 
-			err = bt_le_adv_update_data(adv_data,
-										ARRAY_SIZE(adv_data),
-										NULL, 0);
-			if (err) {
-				printk("adv_update failed: %d\n", err);
-			}
+		err = bt_le_adv_update_data(adv_data,
+									ARRAY_SIZE(adv_data),
+									NULL, 0);
+		if (err) {
+			printk("adv_update failed: %d\n", err);
 		}
 		
 		k_msleep(500);
 	} 
 }
- 
+
+SHELL_CMD_ARG_REGISTER(stop, NULL, "Start or stop sensor node\n Usage: stop <ID> <1 for stop/ 0 for start>", cmd_stop, 3, 0);

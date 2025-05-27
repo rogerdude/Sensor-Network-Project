@@ -1,0 +1,13 @@
+/ {
+	aliases {
+		gnss = &gnss;
+	};
+};
+
+&uart0 {
+	gnss: gnss {
+		status = "okay";
+		compatible = "u-blox,m8";
+		uart-baudrate = <115200>;
+	};
+};
