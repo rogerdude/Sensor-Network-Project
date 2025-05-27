@@ -5,6 +5,7 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/drivers/gnss.h>
+#include <zephyr/logging/log.h>
 #include <string.h>
 #include <myconfig.h>
 
@@ -17,6 +18,9 @@
 
 #define LAT 0
 #define LON 1
+
+#define GNSS_MODEM DEVICE_DT_GET(DT_ALIAS(gnss))
+LOG_MODULE_REGISTER(gnss_sample, CONFIG_GNSS_LOG_LEVEL);
 
 static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -31,6 +35,9 @@ static const char* base_uuid = BASE_UUID;
 uint8_t recv[NUM_OF_SENSORS][NUM_OF_SENSOR_BYTES + 1] = {0};
 float locations[NUM_OF_SENSORS][2] = {0};
 uint8_t stopped[NUM_OF_SENSORS] = {0};
+
+struct k_poll_signal signal;
+K_MUTEX_DEFINE(loc_signal);
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	struct net_buf_simple *ad) {
@@ -55,7 +62,7 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 			}
 			// Update location
 			if (rssi > (-50)) {
-
+				k_poll_signal_raise(&signal, id);
 			}
 		}
 	} else if (strcmp(name, base_uuid) == 0) {
@@ -87,7 +94,77 @@ int stop_adv(struct bt_le_ext_adv *adv) {
 	return err;
 }
 
+static void gnss_data_cb(const struct device *dev, const struct gnss_data *data) {
+	uint64_t timepulse_ns;
+	k_ticks_t timepulse;
+
+	if (data->info.fix_status != GNSS_FIX_STATUS_NO_FIX) {
+		printk("lon: %lld, lat: %lld\n", data->nav_data.longitude, data->nav_data.latitude);
+
+		if (gnss_get_latest_timepulse(dev, &timepulse) == 0) {
+			timepulse_ns = k_ticks_to_ns_near64(timepulse);
+			printf("Got a fix @ %lld ns\n", timepulse_ns);
+		} else {
+			printf("Got a fix!\n");
+		}
+	}
+}
+GNSS_DATA_CALLBACK_DEFINE(GNSS_MODEM, gnss_data_cb);
+
+void thread_gps(void) {
+
+	struct k_poll_event events[1] = {
+        K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_SIGNAL,
+                                 K_POLL_MODE_NOTIFY_ONLY,
+                                 &signal),
+    };
+
+	gnss_systems_t supported, enabled;
+	uint32_t fix_interval;
+	int rc;
+
+	rc = gnss_get_supported_systems(GNSS_MODEM, &supported);
+	if (rc < 0) {
+		printf("Failed to query supported systems (%d)\n", rc);
+	}
+	rc = gnss_get_enabled_systems(GNSS_MODEM, &enabled);
+	if (rc < 0) {
+		printf("Failed to query enabled systems (%d)\n", rc);
+	}
+	rc = gnss_get_fix_rate(GNSS_MODEM, &fix_interval);
+	if (rc < 0) {
+		printf("Failed to query fix rate (%d)\n", rc);
+	}
+	printf("Fix rate = %d ms\n", fix_interval);
+
+	while (1) {
+		k_poll(events, 1, K_FOREVER);
+
+        int signaled, result;
+
+        k_poll_signal_check(&signal, &signaled, &result);
+
+        if (signaled && (result < NUM_OF_SENSORS)) {
+            int id = result;
+			// Update location
+			k_mutex_lock(&loc_signal, K_FOREVER);
+			// code here
+
+			k_mutex_unlock(&loc_signal);
+        } else {
+            printk("Signal error\n");
+        }
+
+        k_poll_signal_reset(&signal);
+        events[0].state = K_POLL_STATE_NOT_READY;
+
+		k_msleep(500);
+	}
+}
+
 int main(void) {
+	 k_poll_signal_init(&signal);
+
 	/* Initialize the Bluetooth Subsystem */
 	int err = bt_enable(NULL);
 	if (err) {
@@ -144,6 +221,7 @@ int main(void) {
 			allData[index] = i;
 			allData[index + 1] = stopped[i];
 
+			k_mutex_lock(&loc_signal, K_FOREVER);
 			// Get lat
 			int lat_int = (int) locations[i][LAT];
 			allData[index + 2] = lat_int;
@@ -157,6 +235,7 @@ int main(void) {
 			allData[index + 7] = (int) ((locations[i][LON] - lon_int) * 100);
 			allData[index + 8] = (int) ((locations[i][LON] - lon_int) * 10000);
 			allData[index + 9] = (int) ((locations[i][LON] - lon_int) * 1000000);
+			k_mutex_unlock(&loc_signal);
 
 			// Get sensor data
 			for (int j = 0; j < NUM_OF_SENSOR_BYTES; j++) {
@@ -182,5 +261,6 @@ int main(void) {
 
 }
 
-
+K_THREAD_DEFINE(gps_id, 1024, thread_gps, NULL, NULL, NULL,
+	5, 0, 0);
  
