@@ -3,6 +3,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/shell/shell.h>
 #include <thingy52_sensors.h>
 #include <thingy52_gas_colour.h>
 #include <math.h>
@@ -18,28 +19,52 @@ static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, 0x0f, 0x18)  
 };
 
-static uint8_t id = 1;
-static uint8_t stopped = 0;
+static int8_t id = -1;
+static uint8_t stopped = 1;
+static bool once = true;
 
-static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
-	struct net_buf_simple *ad) {
-    
+K_MUTEX_DEFINE(id_mutex);
+
+static int cmd_set_id(const struct shell *sh, size_t argc, char **argv) {
+
+    k_mutex_lock(&id_mutex, K_FOREVER);
+    id = atoi(argv[1]);
+    stopped = 0;
+    k_mutex_unlock(&id_mutex);
+
+    return 0;
+}
+
+static void scan_recv(const struct bt_le_scan_recv_info *info,
+		      struct net_buf_simple *buf) {
+
+    if (buf->len < (2 + UUID_SIZE)) {
+        return;
+    }
+
     char name[7];
 	for (int i = 2; i < (2 + UUID_SIZE); i++) {
-        name[i - 2] = ad->data[i];
+        name[i - 2] = buf->data[i];
     }
     name[6] = '\0';
 
     if (strcmp(name, mobile_uuid) == 0) {
-        for (int i = 8; i < ad->len; i += BYTES_PER_SENSOR) {
+        for (int i = 8; i < buf->len; i += BYTES_PER_SENSOR) {
             // check if enabled
-            if (id == ad->data[i]) {
-                stopped = ad->data[i + 1];
+            if (id == buf->data[i]) {
+                if (stopped != buf->data[i + 1]) {
+                    stopped = buf->data[i + 1];
+                    once = false;
+                }
                 break;
             }
         }
     }
 }
+
+static struct bt_le_scan_cb scan_callbacks = {
+	.recv = scan_recv,
+};
 
 int main(void) {
 
@@ -66,7 +91,16 @@ int main(void) {
 
 	printk("Bluetooth initialised\n");
 
-	err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
+    struct bt_le_scan_param scan_param = {
+		.type       = BT_LE_SCAN_TYPE_PASSIVE,
+		.options    = BT_LE_SCAN_OPT_NONE,
+		.interval   = BT_GAP_SCAN_FAST_INTERVAL,
+		.window     = BT_GAP_SCAN_FAST_WINDOW,
+	};
+
+    bt_le_scan_cb_register(&scan_callbacks);
+
+	err = bt_le_scan_start(&scan_param, NULL);
 	if (err) {
 		printk("Start scanning failed (err %d)\n", err);
 		return 0;
@@ -89,6 +123,31 @@ int main(void) {
 
     while (1) {
 
+        if (stopped) {
+            if (!once) {
+                err = bt_le_adv_stop();
+                if (err) {
+                    printk("Advertising failed to stop (err %d)\n", err);
+                } else {
+                    printk("Advertising stopped.\n");
+                }
+                once = true;
+            }
+            k_msleep(200);
+            continue;
+        } else {
+            if (!once) {
+                err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad),
+                    NULL, 0);
+
+                if (err) {
+                    printk("Advertising failed to start (err %d)\n", err);
+                    return 0;
+                }
+                once = true;
+            }
+        }
+
         thingy52_process_sample(&data);
         thingy52_convert_data(&data, &values);
         
@@ -103,7 +162,10 @@ int main(void) {
         for (int i = 0; i < UUID_SIZE; i++) {
             allData[i] = sensor_uuid[i];
         }
+        k_mutex_lock(&id_mutex, K_FOREVER);
         allData[UUID_SIZE] = id;
+        k_mutex_unlock(&id_mutex);
+
         allData[UUID_SIZE + 1] = data.temp.val1;
         allData[UUID_SIZE + 2] = data.hum.val1;
         allData[UUID_SIZE + 3] = data.gas.val1 >> 8;
@@ -126,3 +188,5 @@ int main(void) {
 
     return 0;
 }
+
+SHELL_CMD_ARG_REGISTER(set_id, NULL, "Set sensor node's ID", cmd_set_id, 2, 0);
