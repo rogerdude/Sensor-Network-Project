@@ -6,6 +6,7 @@
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/logging/log.h>
+#include <thingy52_gas_colour.h>
 #include <string.h>
 #include <myconfig.h>
 
@@ -187,6 +188,14 @@ int stop_adv(struct bt_le_ext_adv *adv) {
 
 int main(void) {
 	// k_poll_signal_init(&signal);
+
+	if (thingy52_rgb_init() != 0) {
+        printk("RGB LED couldn't be initialised\n");
+        return -1;
+    } else {
+        printk("RGB LED initialised\n");
+        thingy52_rgb_colour_set(GREEN);
+    }
 
 	/* Initialize the Bluetooth Subsystem */
 	int err = bt_enable(NULL);
