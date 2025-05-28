@@ -90,43 +90,41 @@ static void update_sensor(int idx, float lat, float lon, int severity) {
     lv_obj_clear_flag(sensor_objs[idx], LV_OBJ_FLAG_HIDDEN);
 }
 
-/* BLE data parser */
-static bool parse_sensor_binary(struct bt_data *data, void *user_data) {
-    if (data->type != BT_DATA_MANUFACTURER_DATA) {
-        return true;
-    }
-
-    if (data->data_len < 2 + NUM_OF_SENSORS * BLOCK_SIZE) {
-        return true;
-    }
-
-    const uint8_t *p = data->data + 2;
-
-    for (int i = 0; i < NUM_OF_SENSORS; i++, p += BLOCK_SIZE) {
-        uint8_t  id      = p[0];
-        uint8_t  stopped = p[1];
-        int32_t  lat_i   = (int32_t)sys_get_le32(&p[2]);
-        int32_t  lon_i   = (int32_t)sys_get_le32(&p[6]);
-        uint8_t  sev     = p[10];
-
-        float lat = lat_i / 1e6f;
-        float lon = lon_i / 1e6f;
-
-        printk("Sensor %u: id=%u stopped=%u lat=%.6f lon=%.6f sev=%u\n",
-               i, id, stopped, lat, lon, sev);
-
-        update_sensor(i, lat, lon, sev);
-    }
-  
-    return true;
-}
-
 /* BLE device found callback */
 static void device_found(const bt_addr_le_t *addr,
                          int8_t rssi,
                          uint8_t type,
                          struct net_buf_simple *ad) {
-    bt_data_parse(ad, parse_sensor_binary, NULL);
+
+    if (ad->len < (2 + UUID_SIZE)) {
+        return;
+    }
+
+    char name[7];
+	for (int i = 2; i < (2 + UUID_SIZE); i++) {
+        name[i - 2] = ad->data[i];
+    }
+    name[6] = '\0';
+
+    if (strcmp(name, base_uuid) == 0) {
+        for (int i = 8; i < (8 + (11 * 2)); i += 11) {
+            uint8_t  id      = ad[i];
+            uint8_t  stopped = ad[i + 1];
+            int32_t  lat_i   = ad->data[i + 2] | (ad->data[i + 3] << 8) |
+				                (ad->data[i + 4] << 16) | (ad->data[i + 5] << 24);
+            int32_t  lon_i   = ad->data[i + 6] | (ad->data[i + 7] << 8) |
+				                (ad->data[i + 8] << 16) | (ad->data[i + 9] << 24);
+            uint8_t  sev     = ad[i + 10];
+
+            float lat = lat_i / 1e6f;
+            float lon = lon_i / 1e6f;
+
+            printk("Sensor %u: id=%u stopped=%u lat=%f lon=%f sev=%u\n",
+                i, id, stopped, lat, lon, sev);
+
+            update_from_geo(lat, lon, sev);
+        }
+    }
 }
 
 int main(void) {
