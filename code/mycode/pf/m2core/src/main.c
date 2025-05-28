@@ -188,7 +188,7 @@ int main(void) {
         .interval= BT_GAP_SCAN_FAST_INTERVAL,
         .window  = BT_GAP_SCAN_FAST_WINDOW,
     };
-    err = bt_le_scan_start(&sp,    );
+    err = bt_le_scan_start(&sp,  device_found);
     if (err) {
         LOG_ERR("BT scan failed (%d)", err);
     } else {
