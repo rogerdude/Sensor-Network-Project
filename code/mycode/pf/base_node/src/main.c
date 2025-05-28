@@ -27,6 +27,7 @@ struct SensorJSON {
 };
 
 static const char* mobile_uuid = MOBILE_UUID;
+static const char* base_uuid = BASE_UUID;
 
 struct SensorVal values[NUM_OF_SENSORS];
 uint8_t stopped[NUM_OF_SENSORS] = {0};
@@ -144,7 +145,11 @@ int main(void) {
 
 	while (1) {
 
-		uint8_t mfg_data[11 * NUM_OF_SENSORS];
+		uint8_t mfg_data[UUID_SIZE + (11 * NUM_OF_SENSORS)];
+
+		for (int i = 0; i < UUID_SIZE; i++) {
+			mfg_data[i] = base_uuid[i];
+		}
 
 		for (int i = 0; i < NUM_OF_SENSORS; i++) {
 			struct SensorJSON jsonData;
@@ -181,17 +186,17 @@ int main(void) {
 			int32_t lon_enc = (int32_t)lroundf(values[i].lon * 1e6f);
 
 			// 11 byte [id, stop, lat(4), lon(4), sev(1)]
-			mfg_data[11 * i] = i;
-			mfg_data[1 + (11 * i)] = stopped[i];
-			sys_put_le32(lat_enc, &mfg_data[2 + (11 * i)]);
-			sys_put_le32(lon_enc, &mfg_data[6 + (11 * i)]);
-			mfg_data[10 + (11 * i)] = (uint8_t)jsonData.severity;
+			mfg_data[UUID_SIZE + (11 * i)] = i;
+			mfg_data[UUID_SIZE + 1 + (11 * i)] = stopped[i];
+			sys_put_le32(lat_enc, &mfg_data[UUID_SIZE + 2 + (11 * i)]);
+			sys_put_le32(lon_enc, &mfg_data[UUID_SIZE + 6 + (11 * i)]);
+			mfg_data[UUID_SIZE + 10 + (11 * i)] = (uint8_t)jsonData.severity;
 		}
 
 		struct bt_data adv_data[] = {
 				BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
 				BT_DATA(BT_DATA_MANUFACTURER_DATA,
-						mfg_data, 11 * NUM_OF_SENSORS),
+						mfg_data, UUID_SIZE + (11 * NUM_OF_SENSORS)),
 		};
 
 		err = bt_le_adv_update_data(adv_data,
