@@ -66,6 +66,26 @@ static struct bt_le_scan_cb scan_callbacks = {
 	.recv = scan_recv,
 };
 
+int start_adv(struct bt_le_ext_adv *adv) {
+	int err = bt_le_ext_adv_start(adv, BT_LE_EXT_ADV_START_DEFAULT);
+	if (err) {
+		printk("Failed to start extended advertising (err %d)\n", err);
+	} else {
+		printk("Starting Extended Advertising\n");
+	}
+	return err;
+}
+
+int stop_adv(struct bt_le_ext_adv *adv) {
+	int err = bt_le_ext_adv_stop(adv);
+	if (err) {
+		printk("Failed to stop extended advertising\n");
+	} else {
+		printk("Stopped Extended Advertising\n");
+	}
+	return err;
+}
+
 int main(void) {
 
     if (thingy52_rgb_init() != 0) {
@@ -108,13 +128,23 @@ int main(void) {
 	printk("Started scanning...\n");
 
 	/* Start advertising */
-    err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad),
-		NULL, 0);
+    struct bt_le_ext_adv *adv;
 
+    /* Create a connectable advertising set */
+	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_CONN, NULL, &adv);
 	if (err) {
-		printk("Advertising failed to start (err %d)\n", err);
+		printk("Failed to create advertising set (err %d)\n", err);
+		return err;
+	}
+
+	/* Set advertising data to have complete local name set */
+	err = bt_le_ext_adv_set_data(adv, ad, ARRAY_SIZE(ad), NULL, 0);
+	if (err) {
+		printk("Failed to set advertising data (err %d)\n", err);
 		return 0;
 	}
+
+	start_adv(adv);
 
     struct SensorData data;
     struct SensorValues values;
@@ -122,10 +152,11 @@ int main(void) {
     uint8_t allData[29] = {0};
 
     while (1) {
+        stop_adv(adv);
 
         if (stopped) {
             if (!once) {
-                err = bt_le_adv_stop();
+                stop_adv(adv);
                 if (err) {
                     printk("Advertising failed to stop (err %d)\n", err);
                 } else {
@@ -137,13 +168,7 @@ int main(void) {
             continue;
         } else {
             if (!once) {
-                err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad),
-                    NULL, 0);
-
-                if (err) {
-                    printk("Advertising failed to start (err %d)\n", err);
-                    return 0;
-                }
+                start_adv(adv);
                 once = true;
             }
         }
@@ -173,15 +198,22 @@ int main(void) {
         allData[UUID_SIZE + 5] = acc_int;
         allData[UUID_SIZE + 6] = acc_dec;
 
-        struct bt_data adv[] = {
+        struct bt_data ad1[] = {
             BT_DATA(BT_DATA_MANUFACTURER_DATA, allData, 29)
         };
 
-        err = bt_le_adv_update_data(adv, ARRAY_SIZE(adv), NULL, 0);
-
-        if (err) {
-            printk("adv_update failed: %d\n", err);
+        for (int i = 0; i < 29; i++) {
+            printk("%d ", allData[i]);
         }
+        printk("\n");
+
+        err = bt_le_ext_adv_set_data(adv, ad1, ARRAY_SIZE(ad1), NULL, 0);
+		if (err) {
+			printk("Failed to set advertising data (err %d)\n", err);
+			return 0;
+		}
+
+		start_adv(adv);
 
         k_msleep(1000);
     }
