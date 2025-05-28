@@ -92,9 +92,9 @@ static struct bt_le_scan_cb scan_callbacks = {
 };
 
 int get_severity(int temp, int hum, int gas, float acc) {
-	if (temp > 30 || hum > 70 || gas > 500 || (double) acc > 2.0) {
+	if (temp > 40 || hum > 50 || gas > 500 || (double) acc > 10.0) {
 		return 2; // High severity
-	} else if (temp > 25 || hum > 50 || gas > 500 || (double) acc > 1.0) {
+	} else if (temp > 25 || hum > 40 || gas > 100 || (double) acc > 5.0) {
 		return 1; // Medium severity
 	}
 	return 0; // Low severity
