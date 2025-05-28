@@ -133,12 +133,12 @@ int main(void) {
     printk("Advertising started\n");
 
 	static const struct json_obj_descr sensor_descr[] = {
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, id, JSON_TOK_INT),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, id, JSON_TOK_INT64),
 		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat, JSON_TOK_STRING),
 		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon, JSON_TOK_STRING),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT64),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT64),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT64),
 		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_STRING)
 	};
 
