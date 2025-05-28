@@ -47,7 +47,7 @@ static bool parse_gps(struct bt_data *data, void *user_data) {
             int32_t lon_i = sys_get_le32(mdata + 6);
             float lat = lat_i / 1e6f;
             float lon = lon_i / 1e6f;
-            printk("[GPS] lat=%.6f, lon=%.6f\n", lat, lon);
+            printk("[GPS] lat=%.6f, lon=%.6f\n", (double) lat, (double) lon);
             /* store latest GPS into locations[0] if desired */
             currentlocation[LAT] = lat_i;
             currentlocation[LON] = lon_i;
@@ -205,6 +205,12 @@ int main(void) {
 				allData[j + (index + 10)] = recv[i][j];
 			}
 		}
+
+		printk("Sent: ");
+		for (int i = 0; i < TOTAL_BYTES; i++) {
+			printk("%d ", allData[i]);
+		}
+		printk("\n");
 
 		struct bt_data ad1[] = {
             BT_DATA(BT_DATA_MANUFACTURER_DATA, allData, TOTAL_BYTES),
