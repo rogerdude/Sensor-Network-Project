@@ -143,7 +143,7 @@ static bool parse_sensor_json(struct bt_data *data, void *user_data)
 }
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi,
-                         uint8_t type, struct net_buf_simple *ad) {
+                         uint8_t type, struct net_buf_simple *buf) {
     if (buf->len < (2 + UUID_SIZE)) {
         return;
     }
@@ -155,7 +155,7 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi,
     name[6] = '\0';
 
     if (strcmp(name, base_uuid) == 0) {
-         bt_data_parse(ad, parse_sensor_json, NULL);
+         bt_data_parse(buf, parse_sensor_json, NULL);
     }
 }
 
