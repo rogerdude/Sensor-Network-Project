@@ -11,6 +11,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <myconfig.h>
 
+#define COMPANY_ID_LE 0xFFFF
 #define NUM_OF_SENSORS 2
 #define BYTES_PER_SENSOR 17
 
@@ -145,11 +146,11 @@ int main(void) {
 
 	while (1) {
 
-		uint8_t mfg_data[UUID_SIZE + (11 * NUM_OF_SENSORS)];
-
-		for (int i = 0; i < UUID_SIZE; i++) {
-			mfg_data[i] = base_uuid[i];
-		}
+		uint8_t mfg_data[2 + 11*NUM_OF_SENSORS];
+		size_t idx = 0;
+		
+		mfg_data[idx++] = 0xFF;
+		mfg_data[idx++] = 0xFF;
 
 		for (int i = 0; i < NUM_OF_SENSORS; i++) {
 			struct SensorJSON jsonData;
@@ -182,21 +183,20 @@ int main(void) {
 			}
 
 			// BLE
-			int32_t lat_enc = (int32_t)lroundf(values[i].lat * 1e6f);
-			int32_t lon_enc = (int32_t)lroundf(values[i].lon * 1e6f);
+			int32_t lat_enc = values[i].lat;
+			int32_t lon_enc = values[i].lon;
+			uint8_t sev     = (uint8_t)jsonData.severity;
 
-			// 11 byte [id, stop, lat(4), lon(4), sev(1)]
-			mfg_data[UUID_SIZE + (11 * i)] = i;
-			mfg_data[UUID_SIZE + 1 + (11 * i)] = stopped[i];
-			sys_put_le32(lat_enc, &mfg_data[UUID_SIZE + 2 + (11 * i)]);
-			sys_put_le32(lon_enc, &mfg_data[UUID_SIZE + 6 + (11 * i)]);
-			mfg_data[UUID_SIZE + 10 + (11 * i)] = (uint8_t)jsonData.severity;
+			mfg_data[idx++] = i;              // ID
+			mfg_data[idx++] = stopped[i];     // stopped
+			sys_put_le32(lat_enc, &mfg_data[idx]); idx += 4;
+			sys_put_le32(lon_enc, &mfg_data[idx]); idx += 4;
+			mfg_data[idx++] = sev;     
 		}
 
 		struct bt_data adv_data[] = {
-				BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
-				BT_DATA(BT_DATA_MANUFACTURER_DATA,
-						mfg_data, UUID_SIZE + (11 * NUM_OF_SENSORS)),
+		BT_DATA(BT_DATA_FLAGS, (uint8_t[]){BT_LE_AD_GENERAL|BT_LE_AD_NO_BREDR}, 1),
+		BT_DATA(BT_DATA_MANUFACTURER_DATA, mfg_data, sizeof(mfg_data)),
 		};
 
 		err = bt_le_adv_update_data(adv_data,

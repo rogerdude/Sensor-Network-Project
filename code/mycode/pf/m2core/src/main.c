@@ -19,6 +19,11 @@
 #include <math.h>
 #include <zephyr/data/json.h>
 #include <myconfig.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/printk.h>
+
+#define NUM_OF_SENSORS 2
+#define BLOCK_SIZE    11
 
 extern const lv_img_dsc_t bounds;
 
@@ -116,47 +121,43 @@ static void update_from_geo(float lat, float lon, int severity) {
     color_cell(row, col, severity);
 }
 
-static bool parse_sensor_json(struct bt_data *data, void *user_data)
+static bool parse_sensor_binary(struct bt_data *data, void *user_data)
 {
     if (data->type != BT_DATA_MANUFACTURER_DATA) {
         return true;
     }
 
-    char buf[64];
-    int len = MIN(data->data_len, sizeof(buf)-1);
-    memcpy(buf, data->data, len);
-    buf[len] = '\0';
-
-    struct BleJSON pkt;
-    int err = json_obj_parse(ble_descr,
-                                 ARRAY_SIZE(ble_descr),
-                                 &pkt,
-                                 buf,
-                                 strlen(buf)+1);
-    if (err == 0) {
-        update_from_geo(pkt.lat, pkt.lon, pkt.severity);
-        return false;
-    } else {
-        LOG_WRN("Failed JSON parse (%d): %s", err, buf);
+    if (data->data_len < 2 + NUM_OF_SENSORS*BLOCK_SIZE) {
+        return true;
     }
+
+    const uint8_t *p = data->data + 2;
+
+    for (int i = 0; i < NUM_OF_SENSORS; i++, p += BLOCK_SIZE) {
+        uint8_t  id      = p[0];
+        uint8_t  stopped = p[1];
+        int32_t  lat_i   = (int32_t)sys_get_le32(&p[2]);
+        int32_t  lon_i   = (int32_t)sys_get_le32(&p[6]);
+        uint8_t  sev     = p[10];
+
+        float lat = lat_i / 1e6f;
+        float lon = lon_i / 1e6f;
+
+        printk("Sensor %u: id=%u stopped=%u lat=%f lon=%f sev=%u\n",
+               i, id, stopped, lat, lon, sev);
+
+        update_from_geo(lat, lon, sev);
+    }
+  
     return true;
 }
 
-static void device_found(const bt_addr_le_t *addr, int8_t rssi,
-                         uint8_t type, struct net_buf_simple *buf) {
-    if (buf->len < (2 + UUID_SIZE)) {
-        return;
-    }
-
-    char name[7];
-	for (int i = 2; i < (2 + UUID_SIZE); i++) {
-        name[i - 2] = buf->data[i];
-    }
-    name[6] = '\0';
-
-    if (strcmp(name, base_uuid) == 0) {
-         bt_data_parse(buf, parse_sensor_json, NULL);
-    }
+static void device_found(const bt_addr_le_t *addr,
+                         int8_t rssi,
+                         uint8_t type,
+                         struct net_buf_simple *ad)
+{
+    bt_data_parse(ad, parse_sensor_binary, NULL);
 }
 
 int main(void) {
