@@ -18,6 +18,7 @@
 #include <string.h>
 #include <math.h>
 #include <zephyr/data/json.h>
+#include <myconfig.h>
 
 extern const lv_img_dsc_t bounds;
 
@@ -50,6 +51,8 @@ static float LON_DEG_PER_M;
 
 /* Pre-calc cell pixel size */
 static int cell_w, cell_h;
+
+static const char* base_uuid = BASE_UUID;
 
 /* Persistent arrays for line endpoints */
 static lv_point_t vline_pts[COLS + 1][2];
@@ -141,9 +144,17 @@ static bool parse_sensor_json(struct bt_data *data, void *user_data)
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi,
                          uint8_t type, struct net_buf_simple *ad) {
-    char addr_str[BT_ADDR_LE_STR_LEN];
-    bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
-    if (strcmp(addr_str, "CF:E1:0A:1C:80:C7") == 0) {
+    if (buf->len < (2 + UUID_SIZE)) {
+        return;
+    }
+
+    char name[7];
+	for (int i = 2; i < (2 + UUID_SIZE); i++) {
+        name[i - 2] = buf->data[i];
+    }
+    name[6] = '\0';
+
+    if (strcmp(name, base_uuid) == 0) {
          bt_data_parse(ad, parse_sensor_json, NULL);
     }
 }

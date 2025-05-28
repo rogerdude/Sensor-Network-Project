@@ -73,7 +73,7 @@ int main(void) {
         return -1;
     } else {
         printk("RGB LED initialised\n");
-        thingy52_rgb_colour_set(BLUE);
+        thingy52_rgb_colour_set(RED);
     }
 
     if (init_thingy52_sensors() != 0) {

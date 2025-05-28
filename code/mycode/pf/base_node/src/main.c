@@ -16,7 +16,7 @@
 
 struct SensorVal {
 	int id, stopped;
-	uint32_t lat, lon;
+	int32_t lat, lon;
     int temp, hum, gas;
 	float acc;
 };
@@ -150,9 +150,9 @@ int main(void) {
 			struct SensorJSON jsonData;
 			jsonData.id = i;
 			char latBuf[20];
-			sprintf(latBuf, "%.6f", (double) (values[i].lat / 100000.0));
+			sprintf(latBuf, "%.6f", (double) (values[i].lat / 1000000.0));
 			char lonBuf[20];
-			sprintf(lonBuf, "%.6f", (double) (values[i].lon / 100000.0));
+			sprintf(lonBuf, "%.6f", (double) (values[i].lon / 1000000.0));
 			char accBuf[20];
 			sprintf(accBuf, "%f", (double) values[i].acc);
 			jsonData.lat = latBuf;
