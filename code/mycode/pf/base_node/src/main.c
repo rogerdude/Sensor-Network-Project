@@ -16,13 +16,13 @@
 
 struct SensorVal {
 	int id, stopped;
-	float lat, lon;
+	uint32_t lat, lon;
     int temp, hum, gas;
 	float acc;
 };
 
 struct SensorJSON {
-	float lat, lon, acc;
+	char *lat, *lon, *acc;
     int id, temp, hum, gas, severity;
 };
 
@@ -72,11 +72,11 @@ static void scan_recv(const struct bt_le_scan_recv_info *info,
         for (int i = 8; i < buf->len; i += BYTES_PER_SENSOR) {
 			int id = buf->data[i];
 			values[id].id = id;
-            values[id].lat = (double) buf->data[i + 2] + (double) buf->data[i + 3] / 100 +
-				(double) buf->data[i + 4] / 10000 + (double) buf->data[i + 5] / 1000000;
-				
-			values[id].lon = (double) buf->data[i + 6] + (double) buf->data[i + 7] / 100 +
-				(double) buf->data[i + 8] / 10000 + (double) buf->data[i + 9] / 1000000;
+            values[id].lat = buf->data[i + 2] | (buf->data[i + 3] << 8) |
+				(buf->data[i + 4] << 16) | (buf->data[i + 5] << 24);
+			
+			values[id].lon = buf->data[i + 6] | (buf->data[i + 7] << 8) |
+				(buf->data[i + 8] << 16) | (buf->data[i + 9] << 24);
 			
 			values[id].temp = buf->data[i + 10];
 			values[id].hum = buf->data[i + 11];
@@ -134,12 +134,12 @@ int main(void) {
 
 	static const struct json_obj_descr sensor_descr[] = {
 		JSON_OBJ_DESCR_PRIM(struct SensorJSON, id, JSON_TOK_INT),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat, JSON_TOK_FLOAT_FP),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon, JSON_TOK_FLOAT_FP),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat, JSON_TOK_STRING),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon, JSON_TOK_STRING),
     	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT),
     	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT),
     	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT),
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_FLOAT_FP)
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_STRING)
 	};
 
 	while (1) {
@@ -149,12 +149,18 @@ int main(void) {
 		for (int i = 0; i < NUM_OF_SENSORS; i++) {
 			struct SensorJSON jsonData;
 			jsonData.id = i;
-			jsonData.lat = values[i].lat;
-			jsonData.lon = values[i].lon;
+			char latBuf[20];
+			sprintf(latBuf, "%.6f", (double) (values[i].lat / 100000.0));
+			char lonBuf[20];
+			sprintf(lonBuf, "%.6f", (double) (values[i].lon / 100000.0));
+			char accBuf[20];
+			sprintf(accBuf, "%f", (double) values[i].acc);
+			jsonData.lat = latBuf;
+			jsonData.lon = lonBuf;
 			jsonData.temp = values[i].temp;
 			jsonData.hum = values[i].hum;
 			jsonData.gas = values[i].gas;
-			jsonData.acc = values[i].acc;
+			jsonData.acc = accBuf;
 			jsonData.severity = get_severity(values[i].temp, values[i].hum, values[i].gas, values[i].acc);
 
 			// UART
@@ -171,8 +177,8 @@ int main(void) {
 			}
 
 			// BLE
-			int32_t lat_enc = (int32_t)lroundf(jsonData.lat * 1e6f);
-			int32_t lon_enc = (int32_t)lroundf(jsonData.lon * 1e6f);
+			int32_t lat_enc = (int32_t)lroundf(values[i].lat * 1e6f);
+			int32_t lon_enc = (int32_t)lroundf(values[i].lon * 1e6f);
 
 			// 11 byte [id, stop, lat(4), lon(4), sev(1)]
 			mfg_data[11 * i] = i;

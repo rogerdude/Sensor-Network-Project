@@ -15,10 +15,6 @@
 #define LAT 0
 #define LON 1
 
-#ifndef IBEACON_RSSI
-#define IBEACON_RSSI 0xc8
-#endif
-
 static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA_BYTES(BT_DATA_UUID16_ALL,
