@@ -11,7 +11,6 @@
 #include <zephyr/sys/byteorder.h>
 #include <myconfig.h>
 
-#define COMPANY_ID_LE 0xFFFF
 #define NUM_OF_SENSORS 2
 #define BYTES_PER_SENSOR 17
 
@@ -30,7 +29,7 @@ struct SensorJSON {
 static const char* mobile_uuid = MOBILE_UUID;
 static const char* base_uuid = BASE_UUID;
 
-struct SensorVal values[NUM_OF_SENSORS];
+static struct SensorVal values[NUM_OF_SENSORS];
 uint8_t stopped[NUM_OF_SENSORS] = {0};
 K_MUTEX_DEFINE(stopped_mutex);
 
@@ -135,22 +134,22 @@ int main(void) {
     printk("Advertising started\n");
 
 	static const struct json_obj_descr sensor_descr[] = {
-		JSON_OBJ_DESCR_PRIM(struct SensorJSON, id, JSON_TOK_INT64),
+		JSON_OBJ_DESCR_PRIM(struct SensorJSON, id, JSON_TOK_INT),
 		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lat, JSON_TOK_STRING),
 		JSON_OBJ_DESCR_PRIM(struct SensorJSON, lon, JSON_TOK_STRING),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT64),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT64),
-    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT64),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, temp, JSON_TOK_INT),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, hum, JSON_TOK_INT),
+    	JSON_OBJ_DESCR_PRIM(struct SensorJSON, gas, JSON_TOK_INT),
 		JSON_OBJ_DESCR_PRIM(struct SensorJSON, acc, JSON_TOK_STRING)
 	};
 
 	while (1) {
 
-		uint8_t mfg_data[2 + 11*NUM_OF_SENSORS];
-		size_t idx = 0;
-		
-		mfg_data[idx++] = 0xFF;
-		mfg_data[idx++] = 0xFF;
+		uint8_t mfg_data[UUID_SIZE + (11 * NUM_OF_SENSORS)];
+
+		for (int i = 0; i < UUID_SIZE; i++) {
+			mfg_data[i] = base_uuid[i];
+		}
 
 		for (int i = 0; i < NUM_OF_SENSORS; i++) {
 			struct SensorJSON jsonData;
@@ -160,7 +159,7 @@ int main(void) {
 			char lonBuf[20];
 			sprintf(lonBuf, "%.6f", (double) (values[i].lon / 1000000.0));
 			char accBuf[20];
-			sprintf(accBuf, "%f", (double) values[i].acc);
+			sprintf(accBuf, "%.2f", (double) values[i].acc);
 			jsonData.lat = latBuf;
 			jsonData.lon = lonBuf;
 			jsonData.temp = values[i].temp;
@@ -169,8 +168,12 @@ int main(void) {
 			jsonData.acc = accBuf;
 			jsonData.severity = get_severity(values[i].temp, values[i].hum, values[i].gas, values[i].acc);
 
+			// printk("id: %d, lat: %s, lon: %s, temp: %d, hum: %d, gas: %d, acc: %s\n", 
+			// 	jsonData.id, jsonData.lat, jsonData.lon, jsonData.temp, jsonData.hum, jsonData.gas,
+			// 	jsonData.acc);
+
 			// UART
-			char jsonBuf[128];
+			char jsonBuf[150];
 			int ret = json_obj_encode_buf(sensor_descr,
 											ARRAY_SIZE(sensor_descr),
 											&jsonData,
@@ -183,20 +186,19 @@ int main(void) {
 			}
 
 			// BLE
-			int32_t lat_enc = values[i].lat;
-			int32_t lon_enc = values[i].lon;
-			uint8_t sev     = (uint8_t)jsonData.severity;
+			int32_t lat_enc = (int32_t)lroundf(values[i].lat * 1e6f);
+			int32_t lon_enc = (int32_t)lroundf(values[i].lon * 1e6f);
 
-			mfg_data[idx++] = i;              // ID
-			mfg_data[idx++] = stopped[i];     // stopped
-			sys_put_le32(lat_enc, &mfg_data[idx]); idx += 4;
-			sys_put_le32(lon_enc, &mfg_data[idx]); idx += 4;
-			mfg_data[idx++] = sev;     
+			// 11 byte [id, stop, lat(4), lon(4), sev(1)]
+			mfg_data[UUID_SIZE + (11 * i)] = i;
+			mfg_data[UUID_SIZE + 1 + (11 * i)] = stopped[i];
+			sys_put_le32(lat_enc, &mfg_data[UUID_SIZE + 2 + (11 * i)]);
+			sys_put_le32(lon_enc, &mfg_data[UUID_SIZE + 6 + (11 * i)]);
+			mfg_data[UUID_SIZE + 10 + (11 * i)] = (uint8_t)jsonData.severity;
 		}
 
-		struct bt_data adv_data[] = {
-		BT_DATA(BT_DATA_FLAGS, (uint8_t[]){BT_LE_AD_GENERAL|BT_LE_AD_NO_BREDR}, 1),
-		BT_DATA(BT_DATA_MANUFACTURER_DATA, mfg_data, sizeof(mfg_data)),
+		struct bt_data adv_data[] = {BT_DATA(BT_DATA_MANUFACTURER_DATA,
+						mfg_data, UUID_SIZE + (11 * NUM_OF_SENSORS)),
 		};
 
 		err = bt_le_adv_update_data(adv_data,
@@ -205,7 +207,7 @@ int main(void) {
 		if (err) {
 			printk("adv_update failed: %d\n", err);
 		}
-		
+
 		k_msleep(500);
 	} 
 }
