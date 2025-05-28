@@ -6,7 +6,6 @@
 #include <zephyr/shell/shell.h>  
 #include <zephyr/data/json.h>
 #include <string.h>
-#include <math.h>
 #include <stdlib.h>
 #include <zephyr/sys/byteorder.h>
 #include <myconfig.h>
@@ -186,20 +185,22 @@ int main(void) {
 			}
 
 			// BLE
-			int32_t lat_enc = (int32_t)lroundf(values[i].lat * 1e6f);
-			int32_t lon_enc = (int32_t)lroundf(values[i].lon * 1e6f);
-
 			// 11 byte [id, stop, lat(4), lon(4), sev(1)]
 			mfg_data[UUID_SIZE + (11 * i)] = i;
 			mfg_data[UUID_SIZE + 1 + (11 * i)] = stopped[i];
-			sys_put_le32(lat_enc, &mfg_data[UUID_SIZE + 2 + (11 * i)]);
-			sys_put_le32(lon_enc, &mfg_data[UUID_SIZE + 6 + (11 * i)]);
+			sys_put_le32(values[i].lat, &mfg_data[UUID_SIZE + 2 + (11 * i)]);
+			sys_put_le32(values[i].lon, &mfg_data[UUID_SIZE + 6 + (11 * i)]);
 			mfg_data[UUID_SIZE + 10 + (11 * i)] = (uint8_t)jsonData.severity;
 		}
 
 		struct bt_data adv_data[] = {BT_DATA(BT_DATA_MANUFACTURER_DATA,
 						mfg_data, UUID_SIZE + (11 * NUM_OF_SENSORS)),
 		};
+
+		// for (int i = 0; i < (UUID_SIZE + (11 * NUM_OF_SENSORS)); i++) {
+		// 	printk("%2x ", mfg_data[i]);
+		// }
+		// printk("\n");
 
 		err = bt_le_adv_update_data(adv_data,
 									ARRAY_SIZE(adv_data),
