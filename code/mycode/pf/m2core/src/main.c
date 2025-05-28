@@ -19,27 +19,30 @@
 #include <math.h>
 #include <zephyr/data/json.h>
 
+extern const lv_img_dsc_t bounds;
+
 LOG_MODULE_REGISTER(viewer, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define SCREEN_WIDTH   320
 #define SCREEN_HEIGHT  240
-#define GRID_SPAN_M    100    /* ±100 m */
-#define CELL_SIZE_M    10     /* 10 m per cell */
-#define GRID_CELLS     ((GRID_SPAN_M * 2) / CELL_SIZE_M) /* 200/10=20 */
-#define ROWS           (GRID_CELLS + 1)  /* 21 */
-#define COLS           (GRID_CELLS + 1)  /* 21 */
+#define GRID_SPAN_M_Y   75     /* ±75 m vertically (latitude) */
+#define GRID_SPAN_M_X   100    /* ±100 m horizontally (longitude) */
+#define CELL_SIZE_M     10     /* 10 m per cell */
+#define ROWS            ((GRID_SPAN_M_Y * 2) / CELL_SIZE_M + 1)  /* 150/10+1=16 */
+#define COLS            ((GRID_SPAN_M_X * 2) / CELL_SIZE_M + 1)  /* 200/10+1=21 */
 #define M_PI         3.14159265358979323846f
 
 /* Center cell indices */
 static const int CENTER_ROW = ROWS / 2;
 static const int CENTER_COL = COLS / 2;
 /* Meters per cell */
-static const float METERS_PER_CELL_Y = (2.0f * GRID_SPAN_M) / ROWS;
-static const float METERS_PER_CELL_X = (2.0f * GRID_SPAN_M) / COLS;
+static const float METERS_PER_CELL_Y = (2.0f * GRID_SPAN_M_Y) / ROWS;
+static const float METERS_PER_CELL_X = (2.0f * GRID_SPAN_M_X) / COLS;
+
 
 /* Geographic center */
-static const float CENTER_LAT = -27.499488f;
-static const float CENTER_LON = 153.014495f;
+static const float CENTER_LAT = -27.499964;
+static const float CENTER_LON = 153.014639f;
 
 /* Conversion factors */
 static const float LAT_DEG_PER_M = 1.0f / 111000.0f;
@@ -73,7 +76,7 @@ static void draw_grid(void) {
         lv_obj_t *ln = lv_line_create(lv_scr_act());
         lv_line_set_points(ln, vline_pts[i], 2);
         lv_obj_set_style_line_color(ln, lv_color_black(), 0);
-        lv_obj_set_style_line_width(ln, 1, 0);
+        lv_obj_set_style_line_width(ln, 0, 0);
     }
     for (int i = 0; i <= ROWS; i++) {
         hline_pts[i][0] = (lv_point_t){ .x = 0, .y = i * cell_h };
@@ -81,7 +84,7 @@ static void draw_grid(void) {
         lv_obj_t *ln = lv_line_create(lv_scr_act());
         lv_line_set_points(ln, hline_pts[i], 2);
         lv_obj_set_style_line_color(ln, lv_color_black(), 0);
-        lv_obj_set_style_line_width(ln, 1, 0);
+        lv_obj_set_style_line_width(ln, 0, 0);
     }
 }
 
@@ -157,6 +160,22 @@ int main(void) {
     draw_grid();
     display_blanking_off(disp);
 
+    lv_obj_t *bg_img = lv_img_create(lv_scr_act());
+    lv_img_set_src(bg_img, &bounds); // Use the variable name from bounds.c
+    lv_obj_set_size(bg_img, SCREEN_WIDTH, SCREEN_HEIGHT);
+    lv_obj_set_pos(bg_img, 0, 0);
+    lv_obj_move_background(bg_img);
+
+    float lat_north = CENTER_LAT + (GRID_SPAN_M_Y * LAT_DEG_PER_M);
+    float lat_south = CENTER_LAT - (GRID_SPAN_M_Y * LAT_DEG_PER_M);
+    float lon_east  = CENTER_LON + (GRID_SPAN_M_X * LON_DEG_PER_M);
+    float lon_west  = CENTER_LON - (GRID_SPAN_M_X * LON_DEG_PER_M);
+
+    update_from_geo(lat_north, lon_west, 1);
+    update_from_geo(lat_north, lon_east, 1);
+    update_from_geo(lat_south, lon_west, 1);
+    update_from_geo(lat_south, lon_east, 1);
+
     /* Enable Bluetooth scanning */
     int err = bt_enable(NULL);
     if (err) {
@@ -169,7 +188,7 @@ int main(void) {
         .interval= BT_GAP_SCAN_FAST_INTERVAL,
         .window  = BT_GAP_SCAN_FAST_WINDOW,
     };
-    err = bt_le_scan_start(&sp, device_found);
+    err = bt_le_scan_start(&sp,    );
     if (err) {
         LOG_ERR("BT scan failed (%d)", err);
     } else {
