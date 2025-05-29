@@ -45,7 +45,8 @@ static int cmd_stop(const struct shell *sh, size_t argc, char **argv) {
 		shell_print(sh, "Invalid ID\n");
 		return -1;
 	}
-	if (argv[2]) {
+	int status = atoi(argv[2]);
+	if (status) {
 		stopped[id] = 1;
 	} else {
 		stopped[id] = 0;
@@ -144,7 +145,7 @@ int main(void) {
 
 	while (1) {
 
-		uint8_t mfg_data[UUID_SIZE + (11 * NUM_OF_SENSORS)];
+		uint8_t mfg_data[UUID_SIZE + (11 * NUM_OF_SENSORS)] = {0};
 
 		for (int i = 0; i < UUID_SIZE; i++) {
 			mfg_data[i] = base_uuid[i];
@@ -152,45 +153,49 @@ int main(void) {
 
 		for (int i = 0; i < NUM_OF_SENSORS; i++) {
 			struct SensorJSON jsonData;
-			jsonData.id = i;
-			char latBuf[20];
-			sprintf(latBuf, "%.6f", (double) (values[i].lat / 1000000.0));
-			char lonBuf[20];
-			sprintf(lonBuf, "%.6f", (double) (values[i].lon / 1000000.0));
-			char accBuf[20];
-			sprintf(accBuf, "%.2f", (double) values[i].acc);
-			jsonData.lat = latBuf;
-			jsonData.lon = lonBuf;
-			jsonData.temp = values[i].temp;
-			jsonData.hum = values[i].hum;
-			jsonData.gas = values[i].gas;
-			jsonData.acc = accBuf;
-			jsonData.severity = get_severity(values[i].temp, values[i].hum, values[i].gas, values[i].acc);
+			if (stopped[i] == 0) {
+				jsonData.id = i;
+				char latBuf[20];
+				sprintf(latBuf, "%.6f", (double) (values[i].lat / 1000000.0));
+				char lonBuf[20];
+				sprintf(lonBuf, "%.6f", (double) (values[i].lon / 1000000.0));
+				char accBuf[20];
+				sprintf(accBuf, "%.2f", (double) values[i].acc);
+				jsonData.lat = latBuf;
+				jsonData.lon = lonBuf;
+				jsonData.temp = values[i].temp;
+				jsonData.hum = values[i].hum;
+				jsonData.gas = values[i].gas;
+				jsonData.acc = accBuf;
+				jsonData.severity = get_severity(values[i].temp, values[i].hum, values[i].gas, values[i].acc);
 
-			// printk("id: %d, lat: %s, lon: %s, temp: %d, hum: %d, gas: %d, acc: %s\n", 
-			// 	jsonData.id, jsonData.lat, jsonData.lon, jsonData.temp, jsonData.hum, jsonData.gas,
-			// 	jsonData.acc);
+				// printk("id: %d, lat: %s, lon: %s, temp: %d, hum: %d, gas: %d, acc: %s\n", 
+				// 	jsonData.id, jsonData.lat, jsonData.lon, jsonData.temp, jsonData.hum, jsonData.gas,
+				// 	jsonData.acc);
 
-			// UART
-			char jsonBuf[150];
-			int ret = json_obj_encode_buf(sensor_descr,
-											ARRAY_SIZE(sensor_descr),
-											&jsonData,
-											jsonBuf,
-											sizeof(jsonBuf));
-			if (ret != 0) {
-				printk("JSON error\n");
-			} else {
-				printk("%s\n", jsonBuf);
+				// UART
+				char jsonBuf[150];
+				int ret = json_obj_encode_buf(sensor_descr,
+												ARRAY_SIZE(sensor_descr),
+												&jsonData,
+												jsonBuf,
+												sizeof(jsonBuf));
+				if (ret != 0) {
+					printk("JSON error\n");
+				} else {
+					printk("%s\n", jsonBuf);
+				}
 			}
 
 			// BLE
 			// 11 byte [id, stop, lat(4), lon(4), sev(1)]
 			mfg_data[UUID_SIZE + (11 * i)] = i;
 			mfg_data[UUID_SIZE + 1 + (11 * i)] = stopped[i];
-			sys_put_le32(values[i].lat, &mfg_data[UUID_SIZE + 2 + (11 * i)]);
-			sys_put_le32(values[i].lon, &mfg_data[UUID_SIZE + 6 + (11 * i)]);
-			mfg_data[UUID_SIZE + 10 + (11 * i)] = (uint8_t)jsonData.severity;
+			if (stopped[i] == 0) {
+				sys_put_le32(values[i].lat, &mfg_data[UUID_SIZE + 2 + (11 * i)]);
+				sys_put_le32(values[i].lon, &mfg_data[UUID_SIZE + 6 + (11 * i)]);
+				mfg_data[UUID_SIZE + 10 + (11 * i)] = (uint8_t)jsonData.severity;
+			}
 		}
 
 		struct bt_data adv_data[] = {BT_DATA(BT_DATA_MANUFACTURER_DATA,
