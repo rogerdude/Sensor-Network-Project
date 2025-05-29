@@ -29,6 +29,8 @@ LOG_MODULE_REGISTER(viewer, CONFIG_LOG_DEFAULT_LEVEL);
 #define GRID_SPAN_M_X   100    /* ±100 m horizontally (longitude) */
 #define M_PI         3.14159265358979323846f
 
+static const char* base_uuid = BASE_UUID;
+
 /* Geographic center */
 static const float CENTER_LAT = -27.499964f;
 static const float CENTER_LON = 153.014639f;
@@ -108,13 +110,13 @@ static void device_found(const bt_addr_le_t *addr,
 
     if (strcmp(name, base_uuid) == 0) {
         for (int i = 8; i < (8 + (11 * 2)); i += 11) {
-            uint8_t  id      = ad[i];
-            uint8_t  stopped = ad[i + 1];
+            uint8_t  id      = ad->data[i];
+            uint8_t  stopped = ad->data[i + 1];
             int32_t  lat_i   = ad->data[i + 2] | (ad->data[i + 3] << 8) |
 				                (ad->data[i + 4] << 16) | (ad->data[i + 5] << 24);
             int32_t  lon_i   = ad->data[i + 6] | (ad->data[i + 7] << 8) |
 				                (ad->data[i + 8] << 16) | (ad->data[i + 9] << 24);
-            uint8_t  sev     = ad[i + 10];
+            uint8_t  sev     = ad->data[i + 10];
 
             float lat = lat_i / 1e6f;
             float lon = lon_i / 1e6f;
@@ -122,7 +124,7 @@ static void device_found(const bt_addr_le_t *addr,
             printk("Sensor %u: id=%u stopped=%u lat=%f lon=%f sev=%u\n",
                 i, id, stopped, lat, lon, sev);
 
-            update_from_geo(lat, lon, sev);
+            update_sensor(id, lat, lon, sev);
         }
     }
 }
