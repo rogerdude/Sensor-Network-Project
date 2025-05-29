@@ -151,3 +151,5 @@ code/tools
 code/zephyr
 !code/mycode/zephyr/
 .cache
+
+*.pem
